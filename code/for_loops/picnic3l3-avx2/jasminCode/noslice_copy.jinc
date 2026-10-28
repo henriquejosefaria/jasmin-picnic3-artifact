@@ -1,0 +1,647 @@
+/* Slice-free copy helpers (no_sliced_arrays PICNIC3L3).
+ * Replace sub-arrays taken at a run-time offset (big[off : SMALL]) by an explicit
+ * copy between the big array and a fixed-size buffer. off is a BYTE offset.
+ *   __ns_get_X / __ns_put_X   : stack arrays (no pointer registers needed)
+ *   __ns_getp_X / __ns_putp_X : reg ptr big array (for non-inline callers)  */
+
+require "params.jinc"
+
+inline fn __ns_get_tapes(
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] big,
+  stack u8[TAPES_FULL_SIZE] small,
+  reg u64 off
+) -> stack u8[TAPES_FULL_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TAPES_FULL_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_put_tapes(
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] big,
+  stack u8[TAPES_FULL_SIZE] small,
+  reg u64 off
+) -> stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TAPES_FULL_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_getp_tapes(
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] big,
+  stack u8[TAPES_FULL_SIZE] small,
+  reg u64 off
+) -> stack u8[TAPES_FULL_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TAPES_FULL_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_putp_tapes(
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] big,
+  stack u8[TAPES_FULL_SIZE] small,
+  reg u64 off
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TAPES_FULL_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_get_msgs(
+  stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] big,
+  stack u8[MSGS_FULL_SIZE] small,
+  reg u64 off
+) -> stack u8[MSGS_FULL_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < MSGS_FULL_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_put_msgs(
+  stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] big,
+  stack u8[MSGS_FULL_SIZE] small,
+  reg u64 off
+) -> stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < MSGS_FULL_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_getp_msgs(
+  reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] big,
+  stack u8[MSGS_FULL_SIZE] small,
+  reg u64 off
+) -> stack u8[MSGS_FULL_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < MSGS_FULL_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_putp_msgs(
+  reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] big,
+  stack u8[MSGS_FULL_SIZE] small,
+  reg u64 off
+) -> reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < MSGS_FULL_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_get_mzd(
+  stack u8[PNC_N_ROUNDS * MZD_SIZE] big,
+  stack u8[MZD_SIZE] small,
+  reg u64 off
+) -> stack u8[MZD_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < MZD_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_put_mzd(
+  stack u8[PNC_N_ROUNDS * MZD_SIZE] big,
+  stack u8[MZD_SIZE] small,
+  reg u64 off
+) -> stack u8[PNC_N_ROUNDS * MZD_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < MZD_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_getp_mzd(
+  reg ptr u8[PNC_N_ROUNDS * MZD_SIZE] big,
+  stack u8[MZD_SIZE] small,
+  reg u64 off
+) -> stack u8[MZD_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < MZD_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_putp_mzd(
+  reg ptr u8[PNC_N_ROUNDS * MZD_SIZE] big,
+  stack u8[MZD_SIZE] small,
+  reg u64 off
+) -> reg ptr u8[PNC_N_ROUNDS * MZD_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < MZD_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_get_seeds2(
+  stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] big,
+  stack u8[TREE_NODES_2_SIZE] small,
+  reg u64 off
+) -> stack u8[TREE_NODES_2_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TREE_NODES_2_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_put_seeds2(
+  stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] big,
+  stack u8[TREE_NODES_2_SIZE] small,
+  reg u64 off
+) -> stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TREE_NODES_2_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_getp_seeds2(
+  reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] big,
+  stack u8[TREE_NODES_2_SIZE] small,
+  reg u64 off
+) -> stack u8[TREE_NODES_2_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TREE_NODES_2_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_putp_seeds2(
+  reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] big,
+  stack u8[TREE_NODES_2_SIZE] small,
+  reg u64 off
+) -> reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TREE_NODES_2_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_get_flags2(
+  stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] big,
+  stack u8[TREE_NUM_NODES_2] small,
+  reg u64 off
+) -> stack u8[TREE_NUM_NODES_2]
+{
+  reg u64 i j t;
+  reg u8 b;
+  i = 0;
+  while(i < 24) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  while(i < TREE_NUM_NODES_2) {
+    j = off; j += i;
+    b = big[j];
+    small[i] = b;
+    i += 1;
+  }
+  return small;
+}
+
+inline fn __ns_put_flags2(
+  stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] big,
+  stack u8[TREE_NUM_NODES_2] small,
+  reg u64 off
+) -> stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2]
+{
+  reg u64 i j t;
+  reg u8 b;
+  i = 0;
+  while(i < 24) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  while(i < TREE_NUM_NODES_2) {
+    b = small[i];
+    j = off; j += i;
+    big[j] = b;
+    i += 1;
+  }
+  return big;
+}
+
+inline fn __ns_getp_flags2(
+  reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] big,
+  stack u8[TREE_NUM_NODES_2] small,
+  reg u64 off
+) -> stack u8[TREE_NUM_NODES_2]
+{
+  reg u64 i j t;
+  reg u8 b;
+  i = 0;
+  while(i < 24) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  while(i < TREE_NUM_NODES_2) {
+    j = off; j += i;
+    b = big[j];
+    small[i] = b;
+    i += 1;
+  }
+  return small;
+}
+
+inline fn __ns_putp_flags2(
+  reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] big,
+  stack u8[TREE_NUM_NODES_2] small,
+  reg u64 off
+) -> reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2]
+{
+  reg u64 i j t;
+  reg u8 b;
+  i = 0;
+  while(i < 24) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  while(i < TREE_NUM_NODES_2) {
+    b = small[i];
+    j = off; j += i;
+    big[j] = b;
+    i += 1;
+  }
+  return big;
+}
+
+inline fn __ns_get_tapeaux(
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] big,
+  stack u8[TAPE_AUX_SIZE] small,
+  reg u64 off
+) -> stack u8[TAPE_AUX_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TAPE_AUX_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_put_tapeaux(
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] big,
+  stack u8[TAPE_AUX_SIZE] small,
+  reg u64 off
+) -> stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TAPE_AUX_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_getp_tapeaux(
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] big,
+  stack u8[TAPE_AUX_SIZE] small,
+  reg u64 off
+) -> stack u8[TAPE_AUX_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TAPE_AUX_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_putp_tapeaux(
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] big,
+  stack u8[TAPE_AUX_SIZE] small,
+  reg u64 off
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TAPE_AUX_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_get_seed2(
+  stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] big,
+  stack u8[TREE_DATA_SIZE] small,
+  reg u64 off
+) -> stack u8[TREE_DATA_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TREE_DATA_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_put_seed2(
+  stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] big,
+  stack u8[TREE_DATA_SIZE] small,
+  reg u64 off
+) -> stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TREE_DATA_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_getp_seed2(
+  reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] big,
+  stack u8[TREE_DATA_SIZE] small,
+  reg u64 off
+) -> stack u8[TREE_DATA_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TREE_DATA_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_putp_seed2(
+  reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] big,
+  stack u8[TREE_DATA_SIZE] small,
+  reg u64 off
+) -> reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < TREE_DATA_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_get_seed1(
+  stack u8[TREE_NODES_1_SIZE] big,
+  stack u8[PNC_SEED_SIZE] small,
+  reg u64 off
+) -> stack u8[PNC_SEED_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < PNC_SEED_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_put_seed1(
+  stack u8[TREE_NODES_1_SIZE] big,
+  stack u8[PNC_SEED_SIZE] small,
+  reg u64 off
+) -> stack u8[TREE_NODES_1_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < PNC_SEED_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_getp_seed1(
+  reg ptr u8[TREE_NODES_1_SIZE] big,
+  stack u8[PNC_SEED_SIZE] small,
+  reg u64 off
+) -> stack u8[PNC_SEED_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < PNC_SEED_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_putp_seed1(
+  reg ptr u8[TREE_NODES_1_SIZE] big,
+  stack u8[PNC_SEED_SIZE] small,
+  reg u64 off
+) -> reg ptr u8[TREE_NODES_1_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < PNC_SEED_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_get_node3(
+  stack u8[TREE_NODES_3_SIZE] big,
+  stack u8[PNC_DIGEST_SIZE] small,
+  reg u64 off
+) -> stack u8[PNC_DIGEST_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < PNC_DIGEST_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_put_node3(
+  stack u8[TREE_NODES_3_SIZE] big,
+  stack u8[PNC_DIGEST_SIZE] small,
+  reg u64 off
+) -> stack u8[TREE_NODES_3_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < PNC_DIGEST_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}
+
+inline fn __ns_getp_node3(
+  reg ptr u8[TREE_NODES_3_SIZE] big,
+  stack u8[PNC_DIGEST_SIZE] small,
+  reg u64 off
+) -> stack u8[PNC_DIGEST_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < PNC_DIGEST_SIZE) {
+    j = off; j += i;
+    t = big.[:u64 j];
+    small.[:u64 i] = t;
+    i += 8;
+  }
+  return small;
+}
+
+inline fn __ns_putp_node3(
+  reg ptr u8[TREE_NODES_3_SIZE] big,
+  stack u8[PNC_DIGEST_SIZE] small,
+  reg u64 off
+) -> reg ptr u8[TREE_NODES_3_SIZE]
+{
+  reg u64 i j t;
+  i = 0;
+  while(i < PNC_DIGEST_SIZE) {
+    t = small.[:u64 i];
+    j = off; j += i;
+    big.[:u64 j] = t;
+    i += 8;
+  }
+  return big;
+}

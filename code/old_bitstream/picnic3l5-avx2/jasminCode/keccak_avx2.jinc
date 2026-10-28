@@ -1,0 +1,1722 @@
+require "params.jinc"
+require "keccak/keccak1600_updstate.jinc"
+
+/* -------------------------------------------------------------------
+ * Namespaces below are sized to match the CHUNK actually absorbed/
+ * squeezed at each step of the protocol (not the size of whatever big
+ * array a chunk is copied out of/into) - this matches how
+ * new_versions_sigSizeVerify/.../keccak_avx2.jinc itself instantiates
+ * A<N>::_update_updstate_avx2 / A<N>::_squeeze_updstate_avx2. Since
+ * this tree avoids array-slicing, wherever the OLD code read/wrote a
+ * chunk at a *runtime* offset inside a bigger array, the function body
+ * below first copies that chunk into a small local stack array of
+ * exactly this size (via a plain indexed copy loop, no slicing), and
+ * only then calls A<N>::_update_updstate_avx2 / _squeeze_updstate_avx2
+ * on that local array.
+ * ------------------------------------------------------------------- */
+
+namespace A1 {
+  param int _ASIZE = 1;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A2 {
+  param int _ASIZE = 2;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A13 {
+  param int _ASIZE = PNC_MESSAGE_BYTE_LENGTH;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A32 {
+  param int _ASIZE = PNC_SALT_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A64 {
+  param int _ASIZE = PNC_SALT_AND_ROOT_LENGTH;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A128 {
+  param int _ASIZE = TAPE_AUX_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A1024 {
+  param int _ASIZE = COMMITMENTS_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A2048 {
+  param int _ASIZE = MSGS_FULL_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A38464 {
+  param int _ASIZE = PNC_N_ROUNDS * CH_ROUND_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+
+/**************************/
+/*     HASH FUNCTIONS     */
+/**************************/
+
+
+#[returnaddress="stack"]
+fn _computeSaltAndRootSeed(
+  #[secret]          reg ptr u8[PNC_SALT_AND_ROOT_LENGTH] out,
+  #[poly=privateKey] reg ptr u8[MZD_SIZE] privateKey,
+  #[poly=publickey]  reg ptr u8[MZD_SIZE] publicKey,
+  #[poly=plaintext]  reg ptr u8[MZD_SIZE] plaintext,
+  #[poly=message]    reg ptr u8[PNC_MESSAGE_BYTE_LENGTH] message
+) -> reg ptr u8[PNC_SALT_AND_ROOT_LENGTH]
+{
+
+  reg ui64 len;
+  reg u16 t16;
+  reg ui8 x;
+  reg u8 y;
+
+  stack u8[2] t16_s;
+
+  reg ptr u8[2] t16_r;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(out, privateKey, publicKey, plaintext, message);
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  t16 = LOWMC_N_BITS;
+  t16_s[:u16 0] = t16;
+
+  len = 32;
+  () = #unspill(privateKey);
+  pst = A32::_update_updstate_avx2(pst, privateKey, len);
+  len = 13;
+  () = #unspill(message);
+  pst = A13::_update_updstate_avx2(pst,    message, len);
+  len = 32;
+  () = #unspill(publicKey);
+  pst = A32::_update_updstate_avx2(pst,  publicKey, len);
+  len = 32;
+  () = #unspill(plaintext);
+  pst = A32::_update_updstate_avx2(pst,  plaintext, len);
+  len = 2;
+  t16_r = t16_s;
+  pst = A2::_update_updstate_avx2(pst,  t16_r, len);
+  pst = _finish_updstate_avx2(pst);
+
+  /*******************************************/
+  /* APPLY PERMUTATION TO STATE AND RETRIEVE */
+  /*******************************************/
+
+  len = 64;
+  () = #unspill(out);
+  _, out = A64::_squeeze_updstate_avx2(pst, out, len);
+
+  return out;
+}
+
+#[returnaddress="stack"]
+fn __hashSeed_1(
+  #[secret]         reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] out,
+  #[poly=inputSeed] reg ptr u8[TREE_NODES_1_SIZE] inputSeed,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public]         reg u64 inputSeed_idx,
+  #[poly=repIndex]  reg u16 repIndex,
+  #[poly=nodeIndex] reg u16 nodeIndex
+) -> reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+  reg u64 t;
+  inline int z;
+
+  stack u8[1] prefix_s;
+  stack u8[2] t16_s;
+  stack u8[PNC_SEED_SIZE] seed_s;
+
+  reg ptr u8[1] prefix;
+  reg ptr u8[2] t16;
+  reg ptr u8[PNC_SEED_SIZE] seed;
+  reg ptr u8[2 * PNC_SEED_SIZE] reg_out;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(out, salt, repIndex, nodeIndex);
+
+  for z = 0 to PNC_SEED_SIZE / 8 {
+    t = inputSeed.[u64 inputSeed_idx + z * 8];
+    seed_s[u64 z] = t;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  len = 1;
+  prefix_s[0] = HASH_PREFIX_1;
+  prefix = prefix_s;
+  pst = A1::_update_updstate_avx2(pst, prefix, len);
+
+  seed = seed_s;
+  len = PNC_SEED_SIZE;
+  pst = A32::_update_updstate_avx2(pst, seed, len);
+
+  () = #unspill(salt);
+  len = PNC_SALT_SIZE;
+  pst = A32::_update_updstate_avx2(pst, salt, len);
+
+  len = 2;
+  () = #unspill(repIndex);
+  t16_s[:u16 0] = repIndex;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+
+  len = 2;
+  () = #unspill(nodeIndex);
+  t16_s[:u16 0] = nodeIndex;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+  pst = _finish_updstate_avx2(pst);
+
+  /*******************************************/
+  /* APPLY PERMUTATION TO STATE AND RETRIEVE */
+  /*******************************************/
+  len = 2 * PNC_SEED_SIZE;
+  () = #unspill(out);
+  reg_out = out[0:2 * PNC_SEED_SIZE];
+  _, reg_out = A64::_squeeze_updstate_avx2(pst, reg_out, len);
+  out[0:2 * PNC_SEED_SIZE] = reg_out;
+
+  return out;
+}
+
+#[returnaddress="stack"]
+fn _hashSeed_2(
+  #[secret]         reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] out,
+  #[poly=inputSeed] reg ptr u8[TREE_NODES_2_SIZE] inputSeed,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public]         reg u64 inputSeed_idx,
+  #[poly=repIndex]  reg u16 repIndex,
+  #[poly=nodeIndex] reg u16 nodeIndex
+) -> reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+  reg u64 t;
+  inline int z;
+
+  stack u8[1] prefix_s;
+  stack u8[2] t16_s;
+  stack u8[PNC_SEED_SIZE] seed_s;
+
+  reg ptr u8[1] prefix;
+  reg ptr u8[2] t16;
+  reg ptr u8[PNC_SEED_SIZE] seed;
+  reg ptr u8[2 * PNC_SEED_SIZE] reg_out;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(out, salt, repIndex, nodeIndex);
+
+  for z = 0 to PNC_SEED_SIZE / 8 {
+    t = inputSeed.[u64 inputSeed_idx + z * 8];
+    seed_s[u64 z] = t;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  len = 1;
+  prefix_s[0] = HASH_PREFIX_1;
+  prefix = prefix_s;
+  pst = A1::_update_updstate_avx2(pst, prefix, len);
+
+  seed = seed_s;
+  len = PNC_SEED_SIZE;
+  pst = A32::_update_updstate_avx2(pst, seed, len);
+
+  () = #unspill(salt);
+  len = PNC_SALT_SIZE;
+  pst = A32::_update_updstate_avx2(pst, salt, len);
+
+  len = 2;
+  () = #unspill(repIndex);
+  t16_s[:u16 0] = repIndex;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+
+  len = 2;
+  () = #unspill(nodeIndex);
+  t16_s[:u16 0] = nodeIndex;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+  pst = _finish_updstate_avx2(pst);
+
+  /*******************************************/
+  /* APPLY PERMUTATION TO STATE AND RETRIEVE */
+  /*******************************************/
+  len = 2 * PNC_SEED_SIZE;
+  () = #unspill(out);
+  reg_out = out[0:2 * PNC_SEED_SIZE];
+  _, reg_out = A64::_squeeze_updstate_avx2(pst, reg_out, len);
+  out[0:2 * PNC_SEED_SIZE] = reg_out;
+
+  return out;
+}
+
+#[returnaddress="stack"]
+fn _hashSeed_22(
+  #[secret]         reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] out,
+  #[poly=inputSeed] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] inputSeed,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public]         reg u64 inputSeed_idx,
+  #[poly=repIndex]  reg u16 repIndex,
+  #[poly=nodeIndex] reg u16 nodeIndex
+) -> reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+  reg u64 t;
+  inline int z;
+
+  stack u8[1] prefix_s;
+  stack u8[2] t16_s;
+  stack u8[PNC_SEED_SIZE] seed_s;
+
+  reg ptr u8[1] prefix;
+  reg ptr u8[2] t16;
+  reg ptr u8[PNC_SEED_SIZE] seed;
+  reg ptr u8[2 * PNC_SEED_SIZE] reg_out;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(out, salt, repIndex, nodeIndex);
+
+  for z = 0 to PNC_SEED_SIZE / 8 {
+    t = inputSeed.[u64 inputSeed_idx + z * 8];
+    seed_s[u64 z] = t;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  len = 1;
+  prefix_s[0] = HASH_PREFIX_1;
+  prefix = prefix_s;
+  pst = A1::_update_updstate_avx2(pst, prefix, len);
+
+  seed = seed_s;
+  len = PNC_SEED_SIZE;
+  pst = A32::_update_updstate_avx2(pst, seed, len);
+
+  () = #unspill(salt);
+  len = PNC_SALT_SIZE;
+  pst = A32::_update_updstate_avx2(pst, salt, len);
+
+  len = 2;
+  () = #unspill(repIndex);
+  t16_s[:u16 0] = repIndex;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+
+  len = 2;
+  () = #unspill(nodeIndex);
+  t16_s[:u16 0] = nodeIndex;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+  pst = _finish_updstate_avx2(pst);
+
+  /*******************************************/
+  /* APPLY PERMUTATION TO STATE AND RETRIEVE */
+  /*******************************************/
+  len = 2 * PNC_SEED_SIZE;
+  () = #unspill(out);
+  reg_out = out[0:2 * PNC_SEED_SIZE];
+  _, reg_out = A64::_squeeze_updstate_avx2(pst, reg_out, len);
+  out[0:2 * PNC_SEED_SIZE] = reg_out;
+
+  return out;
+}
+
+
+#[returnaddress="stack"]
+fn _commit(
+  #[secret] reg ptr u8[COMMITMENTS_FULL_SIZE] out,
+  #[secret] reg ptr u8[TREE_NODES_2_SIZE] seeds,
+  #[secret] reg ptr u8[TAPES_FULL_SIZE] tapes,
+  #[secret] reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 round,
+  #[public] reg u16 player,
+  #[public] reg u64 base_seeds,
+  #[public] reg u64 base_out
+) -> reg ptr u8[COMMITMENTS_FULL_SIZE]
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+  reg u16 round16;
+  reg u64 offset t;
+  inline int z;
+
+  stack u8[2] t16_s;
+  stack u8[TREE_DATA_SIZE] seed_s;
+  stack u8[TAPE_AUX_SIZE] tapeaux_s;
+  stack u8[COMMITMENT_SIZE] commit_s;
+
+  reg ptr u8[2] t16;
+  reg ptr u8[TREE_DATA_SIZE] seed;
+  reg ptr u8[TAPE_AUX_SIZE] tapeaux;
+  reg ptr u8[COMMITMENT_SIZE] commit;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(out, seeds, tapes, salt, round, player, base_out);
+
+  for z = 0 to TREE_DATA_SIZE / 8 {
+    t = seeds.[u64 base_seeds + z * 8];
+    seed_s[u64 z] = t;
+  }
+
+  () = #unspill(tapes);
+  for z = 0 to TAPE_AUX_SIZE / 8 {
+    t = tapes.[u64 TAPE_AUX_IDX + z * 8];
+    tapeaux_s[u64 z] = t;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  seed = seed_s;
+  len = TREE_DATA_SIZE;
+  pst = A32::_update_updstate_avx2(pst, seed, len);
+
+  tapeaux = tapeaux_s;
+  len = TAPE_AUX_SIZE;
+  pst = A128::_update_updstate_avx2(pst, tapeaux, len);
+
+  () = #unspill(salt);
+  len = PNC_SALT_SIZE;
+  pst = A32::_update_updstate_avx2(pst, salt, len);
+
+  () = #unspill(round);
+  len = 2;
+  round16 = round;
+  t16_s[u16 0] = round16;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+
+  () = #unspill(player);
+  len = 2;
+  t16_s[u16 0] = player;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+  pst = _finish_updstate_avx2(pst);
+
+  /*******************************************/
+  /* APPLY PERMUTATION TO STATE AND RETRIEVE */
+  /*******************************************/
+
+  commit = commit_s;
+  len = COMMITMENT_SIZE;
+  _, commit = A64::_squeeze_updstate_avx2(pst, commit, len);
+
+  () = #unspill(out, base_out);
+  for z = 0 to COMMITMENT_SIZE / 8 {
+    t = commit[u64 z];
+    out.[u64 base_out + z * 8] = t;
+  }
+
+  return out;
+}
+
+
+#[returnaddress="stack"]
+fn _commit2(
+  #[secret] reg ptr u8[COMMITMENTS_FULL_SIZE] out,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[secret] reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 round,
+  #[public] reg u16 player,
+  #[public] reg u64 base_seeds,
+  #[public] reg u64 base_out
+) -> reg ptr u8[COMMITMENTS_FULL_SIZE]
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+  reg u16 round16;
+  reg u64 offset t;
+  inline int z;
+
+  stack u8[2] t16_s;
+  stack u8[TREE_DATA_SIZE] seed_s;
+  stack u8[TAPE_AUX_SIZE] tapeaux_s;
+  stack u8[COMMITMENT_SIZE] commit_s;
+
+  reg ptr u8[2] t16;
+  reg ptr u8[TREE_DATA_SIZE] seed;
+  reg ptr u8[TAPE_AUX_SIZE] tapeaux;
+  reg ptr u8[COMMITMENT_SIZE] commit;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(out, salt, round, player, base_out);
+
+  for z = 0 to TREE_DATA_SIZE / 8 {
+    t = seeds.[u64 base_seeds + z * 8];
+    seed_s[u64 z] = t;
+  }
+
+  offset = round;
+  offset *= TAPES_FULL_SIZE;
+  offset += TAPE_AUX_IDX;
+  for z = 0 to TAPE_AUX_SIZE / 8 {
+    t = tapes.[u64 offset + z * 8];
+    tapeaux_s[u64 z] = t;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  seed = seed_s;
+  len = TREE_DATA_SIZE;
+  pst = A32::_update_updstate_avx2(pst, seed, len);
+
+  tapeaux = tapeaux_s;
+  len = TAPE_AUX_SIZE;
+  pst = A128::_update_updstate_avx2(pst, tapeaux, len);
+
+  () = #unspill(salt);
+  len = PNC_SALT_SIZE;
+  pst = A32::_update_updstate_avx2(pst, salt, len);
+
+  () = #unspill(round);
+
+  len = 2;
+  round16 = round;
+  t16_s[u16 0] = round16;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+
+  () = #unspill(player);
+
+  len = 2;
+  t16_s[u16 0] = player;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+  pst = _finish_updstate_avx2(pst);
+
+  /*******************************************/
+  /* APPLY PERMUTATION TO STATE AND RETRIEVE */
+  /*******************************************/
+
+  commit = commit_s;
+  len = COMMITMENT_SIZE;
+  _, commit = A64::_squeeze_updstate_avx2(pst, commit, len);
+
+  () = #unspill(out, base_out);
+  for z = 0 to COMMITMENT_SIZE / 8 {
+    t = commit[u64 z];
+    out.[u64 base_out + z * 8] = t;
+  }
+
+  return out;
+}
+
+#[returnaddress="stack"]
+fn _commit_verify(
+  #[secret] reg ptr u8[COMMITMENTS_FULL_SIZE] out,
+  #[secret] reg ptr u8[TREE_NODES_2_SIZE] seeds,
+  #[secret] reg ptr u8[PROOFS_FULL_SIZE] proofs,
+  #[secret] reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 round,
+  #[public] reg u16 player,
+  #[public] reg u64 proof_round,
+  #[public] reg u64 base_seeds,
+  #[public] reg u64 base_out
+) -> reg ptr u8[COMMITMENTS_FULL_SIZE]
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+  reg u16 round16;
+  reg u64 t;
+  inline int z;
+
+  stack u8[2] t16_s;
+  stack u8[TREE_DATA_SIZE] seed_s;
+  stack u8[PROOF_AUX_SIZE] proofaux_s;
+  stack u8[COMMITMENT_SIZE] commit_s;
+
+  reg ptr u8[2] t16;
+  reg ptr u8[TREE_DATA_SIZE] seed;
+  reg ptr u8[PROOF_AUX_SIZE] proofaux;
+  reg ptr u8[COMMITMENT_SIZE] commit;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  base_seeds = 15;
+  base_seeds += GET_LEAVES_2;
+  base_seeds *= TREE_DATA_SIZE;
+
+  () = #spill(out, salt);
+  for z = 0 to TREE_DATA_SIZE / 8 {
+    t = seeds.[u64 base_seeds + z * 8];
+    seed_s[u64 z] = t;
+  }
+
+  proof_round *= PROOF_FULL_SIZE;
+  proof_round += PROOF_AUX_IDX;
+  for z = 0 to PROOF_AUX_SIZE / 8 {
+    t = proofs.[u64 proof_round + z * 8];
+    proofaux_s[u64 z] = t;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+ 
+  seed = seed_s;
+  len = TREE_DATA_SIZE;
+  pst = A32::_update_updstate_avx2(pst, seed, len);
+
+  proofaux = proofaux_s;
+  len = PROOF_AUX_SIZE;
+  pst = A128::_update_updstate_avx2(pst, proofaux, len);
+
+  () = #unspill(salt);
+  len = PNC_SALT_SIZE;
+  pst = A32::_update_updstate_avx2(pst, salt, len);
+
+  len = 2;
+  round16 = round;
+  t16_s[u16 0] = round16;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+
+  len = 2;
+  t16_s[u16 0] = player;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+  pst = _finish_updstate_avx2(pst);
+
+  /*******************************************/
+  /* APPLY PERMUTATION TO STATE AND RETRIEVE */
+  /*******************************************/
+
+  
+
+  commit = commit_s;
+  len = COMMITMENT_SIZE;
+  _, commit = A64::_squeeze_updstate_avx2(pst, commit, len);
+
+  () = #unspill(out);
+  base_out = round;
+  base_out *= COMMITMENTS_SIZE;
+  base_out += 15 * COMMITMENT_SIZE;
+
+  for z = 0 to COMMITMENT_SIZE / 8 {
+    t = commit[u64 z];
+    out.[u64 base_out + z * 8] = t;
+  }
+
+  return out;
+}
+
+#[returnaddress="stack"]
+fn _commit_assemble(
+  #[public] reg u64 out,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[secret] reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 round,
+  #[public] reg u16 player
+) -> reg u64
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+  reg u16 round16;
+  reg u64 t offset;
+  reg ui64 outp;
+  inline int z;
+
+  stack u8[2] t16_s;
+  stack u8[TREE_DATA_SIZE] seed_s;
+  stack u8[TAPE_AUX_SIZE] tapeaux_s;
+
+  reg ptr u8[2] t16;
+  reg ptr u8[TREE_DATA_SIZE] seed;
+  reg ptr u8[TAPE_AUX_SIZE] tapeaux;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(out, seeds, tapes, salt);
+
+  offset = (64u)player;
+  offset += GET_LEAVES_2;
+  offset *= TREE_DATA_SIZE;
+  t = round;
+  t *= TREE_NODES_2_SIZE;
+  offset += t;
+  () = #unspill(seeds);
+  for z = 0 to TREE_DATA_SIZE / 8 {
+    t = seeds.[u64 offset + z * 8];
+    seed_s[u64 z] = t;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  seed = seed_s;
+  len = TREE_DATA_SIZE;
+  pst = A32::_update_updstate_avx2(pst, seed, len);
+
+  if(player == (PNC_N_MPC_PARTIES - 1))
+  {
+    offset = round;
+    offset *= TAPES_FULL_SIZE;
+    offset += TAPE_AUX_IDX;
+    () = #unspill(tapes);
+    for z = 0 to TAPE_AUX_SIZE / 8 {
+      t = tapes.[u64 offset + z * 8];
+      tapeaux_s[u64 z] = t;
+    }
+
+    tapeaux = tapeaux_s;
+    len = TAPE_AUX_SIZE;
+    pst = A128::_update_updstate_avx2(pst, tapeaux, len);
+
+    () = #unspill(salt);
+    len = PNC_SALT_SIZE;
+    pst = A32::_update_updstate_avx2(pst, salt, len);
+
+    len = 2;
+    round16 = round;
+    t16_s[u16 0] = round16;
+    t16 = t16_s;
+    pst = A2::_update_updstate_avx2(pst, t16, len);
+
+    len = 2;
+    t16_s[u16 0] = player;
+    t16 = t16_s;
+    pst = A2::_update_updstate_avx2(pst, t16, len);
+    pst = _finish_updstate_avx2(pst);
+  }
+  else
+  {
+    () = #unspill(salt);
+    len = PNC_SALT_SIZE;
+    pst = A32::_update_updstate_avx2(pst, salt, len);
+
+    len = 2;
+    round16 = round;
+    t16_s[u16 0] = round16;
+    t16 = t16_s;
+    pst = A2::_update_updstate_avx2(pst, t16, len);
+
+    len = 2;
+    t16_s[u16 0] = player;
+    t16 = t16_s;
+    pst = A2::_update_updstate_avx2(pst, t16, len);
+    pst = _finish_updstate_avx2(pst);
+  }
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  () = #unspill(out);
+  len = COMMITMENT_SIZE;
+  outp = (64ui) out;
+  outp, pst = _squeeze_m_updstate_avx2(outp, len, pst);
+  out = (64u) outp;
+
+  return out;
+}
+
+#[returnaddress="stack"]
+fn _commit_h2(
+  #[secret] reg ptr u8[PNC_N_ROUNDS * CH_ROUND_SIZE] out,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * COMMITMENTS_SIZE] in,
+  #[public] reg u64 idx
+) -> reg ptr u8[PNC_N_ROUNDS * CH_ROUND_SIZE]
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+  reg u64 offset t;
+  inline int z;
+
+  stack u8[COMMITMENTS_SIZE] in_s;
+  stack u8[CH_ROUND_SIZE] ch_s;
+
+  reg ptr u8[COMMITMENTS_SIZE] in_chunk;
+  reg ptr u8[CH_ROUND_SIZE] ch;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(out);
+
+  offset = idx;
+  offset *= COMMITMENTS_SIZE;
+  for z = 0 to COMMITMENTS_SIZE / 8 {
+    t = in.[u64 offset + z * 8];
+    in_s[u64 z] = t;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  in_chunk = in_s;
+  len = COMMITMENTS_SIZE;
+  pst = A1024::_update_updstate_avx2(pst, in_chunk, len);
+  pst = _finish_updstate_avx2(pst);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  ch = ch_s;
+  len = CH_ROUND_SIZE;
+  _, ch = A64::_squeeze_updstate_avx2(pst, ch, len);
+
+  () = #unspill(out);
+  offset = idx;
+  offset *= CH_ROUND_SIZE;
+  for z = 0 to CH_ROUND_SIZE / 8 {
+    t = ch[u64 z];
+    out.[u64 offset + z * 8] = t;
+  }
+
+  return out;
+}
+
+
+#[returnaddress="stack"]
+fn _commit_v(
+  #[secret] reg ptr u8[PNC_N_ROUNDS * CV_ROUND_SIZE] out,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * MZD_SIZE] inputs,
+  #[secret] reg const ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+  #[public]           reg u64 idx
+) -> reg ptr u8[CV_FULL_SIZE]
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+  reg u64 offset t;
+  inline int z;
+
+  stack u8[MZD_SIZE] input_s;
+  stack u8[MSGS_FULL_SIZE] msg_s;
+  stack u8[CV_ROUND_SIZE] cv_s;
+
+  reg ptr u8[MZD_SIZE] input;
+  reg ptr u8[MSGS_FULL_SIZE] msg;
+  reg ptr u8[CV_ROUND_SIZE] cv;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(out, inputs, msgs);
+
+  /* no_array_slicing: copy the runtime-offset chunks out of the
+     bigger inputs/msgs arrays before feeding them to the new API. */
+  offset = idx;
+  offset *= MZD_SIZE;
+  () = #unspill(inputs);
+  for z = 0 to MZD_SIZE / 8 {
+    t = inputs.[u64 offset + z * 8];
+    input_s[u64 z] = t;
+  }
+
+  offset = idx;
+  offset *= MSGS_FULL_SIZE;
+  () = #unspill(msgs);
+  for z = 0 to MSGS_FULL_SIZE / 8 {
+    t = msgs.[u64 offset + z * 8];
+    msg_s[u64 z] = t;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  input = input_s;
+  len = MZD_SIZE;
+  pst = A32::_update_updstate_avx2(pst, input, len);
+
+  msg = msg_s;
+  len = MSGS_FULL_SIZE;
+  pst = A2048::_update_updstate_avx2(pst, msg, len);
+  pst = _finish_updstate_avx2(pst);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  cv = cv_s;
+  len = CV_ROUND_SIZE;
+  _, cv = A64::_squeeze_updstate_avx2(pst, cv, len);
+
+  () = #unspill(out);
+  offset = idx;
+  offset *= CV_ROUND_SIZE;
+  for z = 0 to CV_ROUND_SIZE / 8 {
+    t = cv[u64 z];
+    out.[u64 offset + z * 8] = t;
+  }
+
+  return out;
+}
+
+#[returnaddress="stack"]
+fn _commit_v_verify(
+  reg ptr u8[CV_FULL_SIZE] out,
+  reg ptr u8[SIG_PROOFS_SIZE] input,
+  reg ptr u8[MSGS_FULL_SIZE] msgs,
+  reg u64 input_idx out_idx
+) -> reg ptr u8[CV_FULL_SIZE]
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+  reg u64 offset t;
+  inline int z;
+
+  stack u8[MZD_SIZE] input_s;
+  stack u8[CV_ROUND_SIZE] cv_s;
+
+  reg ptr u8[MZD_SIZE] input_chunk;
+  reg ptr u8[CV_ROUND_SIZE] cv;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(out, msgs);
+
+  /* no_array_slicing: copy the runtime-offset chunk out of the
+     bigger input array before feeding it to the new API. */
+  for z = 0 to MZD_SIZE / 8 {
+    t = input.[u64 input_idx + z * 8];
+    input_s[u64 z] = t;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  input_chunk = input_s;
+  len = MZD_SIZE;
+  pst = A32::_update_updstate_avx2(pst, input_chunk, len);
+
+  () = #unspill(msgs);
+  len = MSGS_FULL_SIZE;
+  pst = A2048::_update_updstate_avx2(pst, msgs, len);
+  pst = _finish_updstate_avx2(pst);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  cv = cv_s;
+  len = CV_ROUND_SIZE;
+  _, cv = A64::_squeeze_updstate_avx2(pst, cv, len);
+
+  () = #unspill(out);
+  for z = 0 to CV_ROUND_SIZE / 8 {
+    t = cv[u64 z];
+    out.[u64 out_idx + z * 8] = t;
+  }
+
+  return out;
+}
+
+
+#[returnaddress="stack"]
+fn _computeParentHash(
+  #[secret] reg ptr u8[TREE_NODES_3_SIZE] tree,
+  #[public] reg ptr u8[TREE_NUM_NODES_3] tree_have,
+  #[public] reg ptr u8[TREE_NUM_NODES_3] tree_exists,
+  #[secret] reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 parent,
+  #[public] reg u16 parent_u16
+) -> reg ptr u8[TREE_NODES_3_SIZE], reg ptr u8[TREE_NUM_NODES_3], reg ptr u8[TREE_NUM_NODES_3]
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+  reg u8 t8;
+  reg u64 child_idx t;
+  inline int z;
+
+  stack u8[1] prefix_s;
+  stack u8[2] t16_s;
+  stack u8[PNC_DIGEST_SIZE] node_s;
+  stack u8[PNC_DIGEST_SIZE] hash_s;
+
+  reg ptr u8[1] prefix;
+  reg ptr u8[2] t16;
+  reg ptr u8[PNC_DIGEST_SIZE] node;
+  reg ptr u8[PNC_DIGEST_SIZE] hash;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(tree, tree_have, tree_exists, salt, parent, parent_u16);
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  len = 1;
+  prefix_s[0] = HASH_PREFIX_3;
+  prefix = prefix_s;
+  pst = A1::_update_updstate_avx2(pst, prefix, len);
+
+  () = #unspill(parent);
+  child_idx = parent;
+  child_idx <<= 1;
+  child_idx *= PNC_DIGEST_SIZE;
+  child_idx += PNC_DIGEST_SIZE;
+
+  /* no_array_slicing: copy the runtime-offset PNC_DIGEST_SIZE chunk
+     out of the bigger tree array before feeding it to the new API. */
+  () = #unspill(tree);
+  for z = 0 to PNC_DIGEST_SIZE / 8 {
+    t = tree.[u64 child_idx + z * 8];
+    node_s[u64 z] = t;
+  }
+  node = node_s;
+  len = PNC_DIGEST_SIZE;
+  pst = A64::_update_updstate_avx2(pst, node, len);
+
+  () = #unspill(parent);
+  child_idx = parent;
+  child_idx <<= 1;
+  child_idx += 2;
+  t8 = 0;
+  if(child_idx < TREE_NUM_NODES_3)
+  {
+
+    () = #unspill(parent);
+    () = #unspill(tree_exists);
+    t8 = tree_exists[parent];
+    if(t8 == 1)
+    {
+      child_idx *= PNC_DIGEST_SIZE;
+      () = #unspill(tree);
+      for z = 0 to PNC_DIGEST_SIZE / 8 {
+        t = tree.[u64 child_idx + z * 8];
+        node_s[u64 z] = t;
+      }
+      node = node_s;
+      len = PNC_DIGEST_SIZE;
+      pst = A64::_update_updstate_avx2(pst, node, len);
+
+      len = PNC_SALT_SIZE;
+      () = #unspill(salt);
+      pst = A32::_update_updstate_avx2(pst, salt, len);
+
+      len = 2;
+      () = #unspill(parent_u16);
+      t16_s[u16 0] =  parent_u16;
+      t16 = t16_s;
+      pst = A2::_update_updstate_avx2(pst, t16, len);
+      pst = _finish_updstate_avx2(pst);
+    }
+    else
+    {
+      len = PNC_SALT_SIZE;
+      () = #unspill(salt);
+      pst = A32::_update_updstate_avx2(pst, salt, len);
+
+      len = 2;
+      () = #unspill(parent_u16);
+      t16_s[u16 0] =  parent_u16;
+      t16 = t16_s;
+      pst = A2::_update_updstate_avx2(pst, t16, len);
+      pst = _finish_updstate_avx2(pst);
+    }
+  }
+  else
+  {
+    len = PNC_SALT_SIZE;
+    () = #unspill(salt);
+    pst = A32::_update_updstate_avx2(pst, salt, len);
+
+    len = 2;
+    () = #unspill(parent_u16);
+    t16_s[u16 0] =  parent_u16;
+    t16 = t16_s;
+    pst = A2::_update_updstate_avx2(pst, t16, len);
+    pst = _finish_updstate_avx2(pst);
+  }
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  () = #unspill(parent);
+  () = #unspill(tree_have);
+  tree_have[(int)parent] = 1;
+
+  hash = hash_s;
+  len = PNC_DIGEST_SIZE;
+  _, hash = A64::_squeeze_updstate_avx2(pst, hash, len);
+
+  () = #unspill(parent);
+  parent *= PNC_DIGEST_SIZE;
+  () = #unspill(tree);
+  for z = 0 to PNC_DIGEST_SIZE / 8 {
+    t = hash[u64 z];
+    tree.[u64 parent + z * 8] = t;
+  }
+
+  () = #unspill(tree_exists);
+  return tree, tree_have, tree_exists;
+}
+
+fn __get_u16(
+  #[poly=array] reg ptr u8[PNC_DIGEST_SIZE] array,
+  #[public]     reg u64 bits
+) -> reg u16
+{
+  reg u64 byte;
+  reg u16 chosen_byte;
+
+  // t = array[bitNumber / 8];
+
+  byte = bits;
+  byte >>= 3;
+  chosen_byte = array.[u16 (int)byte];
+
+
+  // t1 = (7 - (bitNumber % 8)));
+
+  byte = bits;
+  byte &= 7;
+  bits = 7;
+  bits -= byte;
+
+
+  // t >>= t1;
+
+  while(bits > 0)
+  {chosen_byte >>= 1; bits -= 1;}
+
+  // t &= 0x01;
+
+  chosen_byte &= 0x01;
+
+  return chosen_byte;
+}
+
+fn _bitsToChunks(
+  #[public]      reg u64 chunkLenBits,
+  #[poly=chunks] reg ptr u8[PNC_DIGEST_SIZE] input,
+  #[poly=chunks] reg ptr u16[CHUNKS_SIZE] chunks
+) -> reg u64, reg ptr u16[CHUNKS_SIZE]
+{
+
+  reg u16 t16;
+  reg u64 i j z t chunkCount;
+
+  if(chunkLenBits > PNC_DIGEST_SIZE * 8)
+  {
+    chunkCount = 0;
+  } 
+  else
+  {
+    chunkCount = (PNC_DIGEST_SIZE * 8);
+    chunkCount = chunkCount / chunkLenBits;
+
+    i = 0;
+    while(i < chunkCount){
+      chunks[(int)i] = 0;
+      j = 0;
+      while(j < chunkLenBits)
+      {
+        t = chunkLenBits;
+        t *= i;
+        t += j;
+        t >>= 3;
+
+        t = chunkLenBits;
+        t *= i;
+        t += j;
+
+        t16 = __get_u16(input, t);
+
+        z = j;
+        while(z > 0){t16 <<= 1; z -= 1;}
+
+        t16 += chunks[(int)i];
+
+        chunks[(int)i] = t16;
+        j += 1;
+      }
+
+      i += 1;
+    }
+  }
+
+  return chunkCount, chunks;
+}
+
+inline 
+fn __bitsToChunks(
+  #[public]      reg u64 chunkLenBits,
+  #[poly=chunks] stack u8[PNC_DIGEST_SIZE] input,
+  #[poly=chunks] stack u16[CHUNKS_SIZE] chunks
+) -> reg u64, stack u16[CHUNKS_SIZE]
+{
+  reg u64 chunkCount;
+  reg ptr u8[PNC_DIGEST_SIZE] a;
+  reg ptr u16[CHUNKS_SIZE] b;
+  
+  a = input;
+  b = chunks;
+  chunkCount, b = _bitsToChunks(chunkLenBits, a, b);
+  chunks = b;
+
+  return chunkCount, chunks;
+}
+
+/*
+ * This function generates challenge values that are public (challengeC and challengeP) 
+ *  as such, their values may use #[declassify]
+ */
+fn __appendUnique(
+  #[public]          reg u16 value,
+  #[public]          reg u64 position,
+  #[public] reg ptr u8[CHALLENGE_C_SIZE] challengeC
+) -> reg u64, reg ptr u8[CHALLENGE_C_SIZE]
+{
+  reg u16 t;
+  reg u64 i tmp64;
+
+  if(position == 0)
+  {
+    tmp64 = position;
+    challengeC[u16 tmp64] = value;
+    position += 1;
+  }
+  else
+  {
+    i = 0;
+    while(i < position)
+    {
+      tmp64 = i;
+      /* It is a public value - will be within the signature */
+      t = challengeC[u16 tmp64];
+
+      if(t == value){
+        i = position;
+      }
+      i += 1;
+    }
+    if(i == position){
+      tmp64 = position;
+      challengeC[u16 tmp64] = value;
+      position += 1;
+    }
+  }
+
+  return position, challengeC;
+}
+
+fn _expand_challenge(
+  #[public] reg u64 signature,
+  #[public] reg ptr u8[SIG_CHALLENGE_C_SIZE] challengeC,
+  #[public] reg ptr u8[SIG_CHALLENGE_P_SIZE] challengeP
+) -> reg ptr u8[SIG_CHALLENGE_C_SIZE], reg ptr u8[SIG_CHALLENGE_P_SIZE]
+{
+
+  reg u16 t16;
+  reg u64 i offset t64 countC countP;
+  reg u64 numChunks bitsPerChunk tmp64;
+
+  stack u64 s_countC s_countP s_bitsPerChunk;
+
+  stack u8[1] prefix_s;
+  stack u8[PNC_DIGEST_SIZE] h;
+  stack u16[CHUNKS_SIZE] chunks;
+
+  stack ptr u8[SIG_CHALLENGE_C_SIZE] s_challengeC;
+  stack ptr u8[SIG_CHALLENGE_P_SIZE] s_challengeP;
+
+  reg ptr u8[1] prefix;
+  reg ptr u8[PNC_DIGEST_SIZE] reg_h;
+
+  inline int z;
+
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+
+  for z=0 to PNC_U64_DIGEST_SIZE
+  {
+    i = [signature + z*8];
+    h[u64 z] = i;
+  }
+  s_challengeC = challengeC;
+  s_challengeP = challengeP;
+
+  // Populate C
+  // NOTE:  THE ORIGINAL USES U32 WORDS, HERE WERE USING U64 SO
+  // THE OPERATION 32 - clz(x - 1) WAS SHIFTED TO 64 - clz(x - 1)
+
+  countC = 0;
+  while(countC < CHUNKS_SIZE)
+  {
+    chunks[(int)countC] = 0;
+
+    countC += 1;
+  }
+
+  // bitsPerChunkC
+  bitsPerChunk = PNC_N_ROUNDS;
+  _, _, _, _, bitsPerChunk = #DEC(bitsPerChunk);
+  _, _, _, _, _, bitsPerChunk = #LZCNT_64(bitsPerChunk);
+  t64 = bitsPerChunk;
+  bitsPerChunk = 64;
+  bitsPerChunk -= t64;
+  s_bitsPerChunk = bitsPerChunk;
+
+  // ORIGINAL
+  countC = 0;
+  while(countC < PNC_N_OPENED_ROUNDS)
+  {
+    bitsPerChunk = s_bitsPerChunk;
+    numChunks, chunks = __bitsToChunks(bitsPerChunk, h, chunks);
+
+    i = 0;
+    while(i < numChunks)
+    {
+      /* It is a public value within the signature */
+      #[declassify] t16 = chunks[(int)i];
+      if(t16 < PNC_N_ROUNDS)
+      {
+        challengeC = s_challengeC;
+        countC, challengeC = 
+          __appendUnique(t16, countC, challengeC);
+        s_challengeC = challengeC;
+        
+      }
+      if(countC == PNC_N_OPENED_ROUNDS)
+      {
+        i = numChunks;
+      }
+
+      i += 1;
+    }
+    s_countC = countC;
+
+    /*****************************/
+    /*         SET STATE         */
+    /*****************************/
+
+    pst = s_pst;
+    x = (R136 >> 3);
+    y = SHAKE;
+    pst = _init_updstate_avx2(pst, x, y);
+
+    /*****************************/
+    /*     ABSORB INTO STATE     */
+    /*****************************/
+
+    len = 1;
+    prefix_s[u8 0] = HASH_PREFIX_1;
+    prefix = prefix_s;
+    pst = A1::_update_updstate_avx2(pst, prefix, len);
+
+    len = 64;
+    reg_h = h;
+    pst = A64::_update_updstate_avx2(pst, reg_h, len);
+    pst = _finish_updstate_avx2(pst);
+
+    reg_h = h;
+    len = PNC_DIGEST_SIZE;
+    pst, reg_h = A64::_squeeze_updstate_avx2(pst, reg_h, len);
+    s_pst = pst;
+    h = reg_h;
+
+    countC = s_countC;
+  }
+
+  // Note that we always compute h = H(h) after setting C
+  
+  // bitsPerChunkP
+  bitsPerChunk = PNC_N_MPC_PARTIES;
+  _, _, _, _, bitsPerChunk = #DEC(bitsPerChunk);
+  _, _, _, _, _, bitsPerChunk = #LZCNT_64(bitsPerChunk);
+  t64 = bitsPerChunk;
+  bitsPerChunk = 64;
+  bitsPerChunk -= t64;
+  s_bitsPerChunk = bitsPerChunk;
+
+  countP = 0;
+  while(countP < PNC_N_OPENED_ROUNDS)
+  {
+    bitsPerChunk = s_bitsPerChunk;
+    numChunks, chunks = __bitsToChunks(bitsPerChunk, h, chunks);
+
+    i = 0;
+    while(i < numChunks)
+    {
+      /* It is a public value within the signature */
+      #[declassify] t16 = chunks[(int)i];
+      
+      if(t16 < PNC_N_MPC_PARTIES)
+      {
+        tmp64 = countP;
+        challengeP = s_challengeP;
+        challengeP[u16 tmp64] = t16;
+        s_challengeP = challengeP;
+        countP += 1;
+      }
+      if(countP == PNC_N_OPENED_ROUNDS)
+      {
+        i = numChunks;
+      }
+
+      i += 1;
+    }
+    s_countP = countP;
+
+    if(countP < PNC_N_OPENED_ROUNDS)
+    {
+
+      /*****************************/
+      /*         SET STATE         */
+      /*****************************/
+
+      pst = s_pst;
+      x = (R136 >> 3);
+      y = SHAKE;
+      pst = _init_updstate_avx2(pst, x, y);
+
+      /*****************************/
+      /*     ABSORB INTO STATE     */
+      /*****************************/
+
+      len = 1;
+      prefix_s[u8 0] = HASH_PREFIX_1;
+      prefix = prefix_s;
+      pst = A1::_update_updstate_avx2(pst, prefix, len);
+
+      len = 64;
+      reg_h = h;
+      pst = A64::_update_updstate_avx2(pst, reg_h, len);
+      pst = _finish_updstate_avx2(pst);
+
+      reg_h = h;
+      len = PNC_DIGEST_SIZE;
+      pst, reg_h = A64::_squeeze_updstate_avx2(pst, reg_h, len);
+      s_pst = pst;
+      h = reg_h;
+    }
+    countP = s_countP;
+  }
+
+  challengeC = s_challengeC;
+  challengeP = s_challengeP;
+  return challengeC, challengeP;
+}
+
+inline
+fn __expand_challenge(
+  #[public] reg u64 sig,
+  #[public] stack u8[SIG_CHALLENGE_C_SIZE] challengeC,
+  #[public] stack u8[SIG_CHALLENGE_P_SIZE] challengeP
+) -> stack u8[SIG_CHALLENGE_C_SIZE], stack u8[SIG_CHALLENGE_P_SIZE]
+{
+
+  reg ptr u8[CHALLENGE_C_SIZE] reg_challengeC;
+  reg ptr u8[CHALLENGE_P_SIZE] reg_challengeP;
+
+  reg_challengeC = challengeC;
+  reg_challengeP = challengeP;
+  reg_challengeC, reg_challengeP = _expand_challenge(sig, reg_challengeC, reg_challengeP);
+  challengeC = reg_challengeC;
+  challengeP = reg_challengeP;
+
+  return challengeC, challengeP;
+}
+
+#[returnaddress="stack"]
+fn _HCP_base(
+  #[poly=chalenge_h] reg ptr u8[CH_FULL_SIZE] challenge_h,
+  #[poly=treeCv]     reg ptr u8[PNC_DIGEST_SIZE] treeCv,
+  #[poly=salt]       reg ptr u8[PNC_SALT_SIZE] salt,
+  #[poly=pubKey]     reg ptr u8[PNC_INPUT_SIZE] pubKey,
+  #[poly=plaintext]  reg ptr u8[PNC_INPUT_SIZE] plaintext,
+  #[poly=message]    reg ptr u8[PNC_MESSAGE_BYTE_LENGTH] message,
+  #[public]          reg ptr u64[26] pst
+) -> reg ptr u64[26]
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+
+  () = #spill(salt, pubKey, treeCv, message, plaintext);
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  len = PNC_N_ROUNDS * PNC_DIGEST_SIZE;
+  pst = A38464::_update_updstate_avx2(pst, challenge_h, len);
+
+  len = PNC_DIGEST_SIZE;
+  () = #unspill(treeCv);
+  pst = A64::_update_updstate_avx2(pst, treeCv, len);
+
+  len = 32;
+  () = #unspill(salt);
+  pst = A32::_update_updstate_avx2(pst, salt, len);
+
+  len = 32;
+  () = #unspill(pubKey);
+  pst = A32::_update_updstate_avx2(pst, pubKey, len);
+
+  len = 32;
+  () = #unspill(plaintext);
+  pst = A32::_update_updstate_avx2(pst, plaintext, len);
+
+  len = PNC_MESSAGE_BYTE_LENGTH;
+  () = #unspill(message);
+  pst = A13::_update_updstate_avx2(pst, message, len);
+  pst = _finish_updstate_avx2(pst);
+
+  return pst;
+}
+
+#[returnaddress="stack"]
+fn _HCP(
+  #[public]          reg u64 signature,
+  #[poly=chalenge_h] reg ptr u8[CH_FULL_SIZE] challenge_h,
+  #[poly=treeCv]     reg ptr u8[PNC_DIGEST_SIZE] treeCv,
+  #[poly=salt]       reg ptr u8[PNC_SALT_SIZE] salt,
+  #[poly=pubKey]     reg ptr u8[PNC_INPUT_SIZE] pubKey,
+  #[poly=plaintext]  reg ptr u8[PNC_INPUT_SIZE] plaintext,
+  #[poly=message]    reg ptr u8[PNC_MESSAGE_BYTE_LENGTH] message,
+  #[public]          reg ptr u8[SIG_CHALLENGE_C_SIZE] challengeC,
+  #[public]          reg ptr u8[SIG_CHALLENGE_P_SIZE] challengeP
+) -> reg u64, reg ptr u8[SIG_CHALLENGE_C_SIZE], reg ptr u8[SIG_CHALLENGE_P_SIZE]
+{
+  reg ui64 len;
+  reg ui64 sigp;
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(signature);
+  () = #spill(challengeC);
+  () = #spill(challengeP);
+
+  pst = s_pst;
+  pst = _HCP_base(challenge_h, treeCv, salt, pubKey, plaintext, message, pst);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  () = #unspill(signature);
+  len = SIG_CHALLENGE_SIZE;
+  sigp = (64ui) signature;
+  _, pst = _squeeze_m_updstate_avx2(sigp, len, pst);
+
+  () = #unspill(signature);
+  () = #unspill(challengeC);
+  () = #unspill(challengeP);
+  challengeC, challengeP = _expand_challenge(signature, challengeC, challengeP);
+
+  () = #unspill(signature);
+  signature += SIG_CHALLENGE_SIZE;
+  return signature, challengeC, challengeP;
+}
+
+#[returnaddress="stack"]
+fn _HCP_verify(
+  #[public]          reg ptr u8[SIG_CHALLENGE_SIZE] challenge,
+  #[poly=chalenge_h] reg ptr u8[CH_FULL_SIZE] challenge_h,
+  #[poly=treeCv]     reg ptr u8[PNC_DIGEST_SIZE] treeCv,
+  #[poly=salt]       reg ptr u8[PNC_SALT_SIZE] salt,
+  #[poly=pubKey]     reg ptr u8[MZD_SIZE] pubKey,
+  #[poly=plaintext]  reg ptr u8[MZD_SIZE] plaintext,
+  #[poly=message]    reg ptr u8[PNC_MESSAGE_BYTE_LENGTH] message
+) -> reg ptr u8[SIG_CHALLENGE_SIZE]
+{
+  reg ui64 len;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  reg ptr u8[PNC_INPUT_SIZE] a b;
+
+  pst = s_pst;
+
+  () = #spill(challenge);
+  a = pubKey[0:PNC_INPUT_SIZE];
+  b = plaintext[0:PNC_INPUT_SIZE];
+  pst = _HCP_base(challenge_h, treeCv, salt, a, b, message, pst);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  () = #unspill(challenge);
+  len = SIG_CHALLENGE_SIZE;
+  _, challenge = A64::_squeeze_updstate_avx2(pst, challenge, len);
+
+  return challenge;
+}

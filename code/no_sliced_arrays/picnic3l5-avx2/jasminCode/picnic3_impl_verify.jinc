@@ -1,0 +1,359 @@
+require "params.jinc"
+require "picnic3_tree_verify.jinc"
+require "picnic3_aux.jinc"
+require "picnic3_simulate_transitions.jinc"
+
+
+inline
+fn __retrieveCommitments(
+	stack u8[COMMITMENTS_FULL_SIZE] commitments,
+	stack u8[CHALLENGE_C_SIZE] challengeC,
+	stack u8[CHALLENGE_P_SIZE] challengeP,
+	stack u8[PROOFS_FULL_SIZE] proofs,
+	stack u8[TAPES_FULL_SIZE] tapes,
+	stack u8[TREE_NODES_2_SIZE] seeds,
+	stack u8[PNC_SALT_SIZE] salt,
+	reg 	u64 round,
+	reg 	u16 round_u16,
+	reg		u64 proof_round
+) -> stack u8[COMMITMENTS_FULL_SIZE], stack u8[TAPES_FULL_SIZE], reg u64
+{
+
+	reg u8 t8;
+	reg u16 player unopened;
+	reg u64 base_seeds base_commitments P_index idx out_idx in_idx;
+
+	stack u16 s_unopened;
+
+	stack u8[MZD_SIZE] lowmc_key;
+
+ 	reg ptr u8[MZD_SIZE] reg_lowmc_key;
+	reg ptr u8[TAPES_FULL_SIZE] reg_tapes;
+	reg ptr u8[CHALLENGE_C_SIZE] reg_challengeC;
+
+	() = #spill(round, round_u16, proof_round);
+	
+	reg_challengeC = challengeC;
+	t8 = _contains_challengeC_2(reg_challengeC, round_u16);
+
+	if(t8 == 0)
+	{
+		/* We're given iSeed, have expanded the seeds, compute aux from scratch so we can comnpte
+        * Com[t] */
+
+        reg_tapes = tapes;
+        reg_lowmc_key = lowmc_key;
+        reg_tapes, _ = __computeAuxTape_aux(reg_tapes, reg_lowmc_key);
+        tapes = reg_tapes;
+
+        () = #unspill(round, round_u16);
+        player = 0;
+        base_seeds = GET_LEAVES_2;
+        base_seeds *= TREE_DATA_SIZE;
+        base_commitments = round;
+        base_commitments *= PNC_N_MPC_PARTIES * PNC_DIGEST_SIZE;
+        
+        commitments = __commit_x4(commitments, seeds, salt, round_u16, player, base_seeds, base_commitments);
+
+        () = #unspill(round, round_u16);
+        player = 4;
+        base_seeds = GET_LEAVES_2;
+        base_seeds += 4;
+        base_seeds *= TREE_DATA_SIZE;
+        base_commitments = round;
+        base_commitments *= PNC_N_MPC_PARTIES * PNC_DIGEST_SIZE;
+        base_commitments += 4 * PNC_DIGEST_SIZE;
+
+        commitments = __commit_x4(commitments, seeds, salt, round_u16, player, base_seeds, base_commitments);
+
+        () = #unspill(round, round_u16);
+        player = 8;
+        base_seeds = GET_LEAVES_2;
+        base_seeds += 8;
+        base_seeds *= TREE_DATA_SIZE;
+        base_commitments = round;
+        base_commitments *= PNC_N_MPC_PARTIES * PNC_DIGEST_SIZE;
+        base_commitments += 8 * PNC_DIGEST_SIZE;
+
+        commitments = __commit_x4(commitments, seeds, salt, round_u16, player, base_seeds, base_commitments);
+
+        () = #unspill(round, round_u16);
+        player = 12;
+        base_seeds = GET_LEAVES_2;
+        base_seeds += 12;
+        base_seeds *= TREE_DATA_SIZE;
+        base_commitments = round;
+        base_commitments *= PNC_N_MPC_PARTIES * PNC_DIGEST_SIZE;
+        base_commitments += 12 * PNC_DIGEST_SIZE;
+
+
+        commitments = __commit_x4(commitments, seeds, salt, round_u16, player, base_seeds, base_commitments);
+
+        () = #unspill(round, round_u16);
+		player = 15;
+        base_seeds = GET_LEAVES_2;
+        base_seeds += 15;
+        base_seeds *= TREE_DATA_SIZE;
+        base_commitments = round;
+        base_commitments *= PNC_N_MPC_PARTIES * PNC_DIGEST_SIZE;
+        base_commitments += 15 * PNC_DIGEST_SIZE;
+        round = round;
+
+        commitments = __commit(commitments, seeds, tapes, salt, round, player, base_seeds, base_commitments);
+
+        /* after we have checked the tape, we do not need it anymore for this opened iteration */
+	}
+
+	else
+	{
+
+		/* We're given all seeds and aux bits, execpt for the unopened
+        * party, we get their commitment */
+        () = #unspill(round_u16);
+        reg_challengeC = challengeC;
+		P_index = __indexOf(reg_challengeC, round_u16);
+
+		unopened = challengeP[u16 (int)P_index];
+		s_unopened = unopened;
+
+        () = #unspill(round);	
+		player = 0;
+        base_seeds = GET_LEAVES_2;
+        base_seeds *= TREE_DATA_SIZE;
+        base_commitments = round;
+        base_commitments *= PNC_N_MPC_PARTIES * PNC_DIGEST_SIZE;
+
+        commitments = __commit_x4(commitments, seeds, salt, round_u16, player, base_seeds, base_commitments);
+	    
+        () = #unspill(round, round_u16);
+        player = 4;
+        base_seeds = GET_LEAVES_2;
+        base_seeds += 4;
+        base_seeds *= TREE_DATA_SIZE;
+        base_commitments = round;
+        base_commitments *= PNC_N_MPC_PARTIES * PNC_DIGEST_SIZE;
+        base_commitments += 4 * PNC_DIGEST_SIZE;
+
+        commitments = __commit_x4(commitments, seeds, salt, round_u16, player, base_seeds, base_commitments);
+
+        () = #unspill(round, round_u16);
+        player = 8;
+        base_seeds = GET_LEAVES_2;
+        base_seeds += 8;
+        base_seeds *= TREE_DATA_SIZE;
+        base_commitments = round;
+        base_commitments *= PNC_N_MPC_PARTIES * PNC_DIGEST_SIZE;
+        base_commitments += 8 * PNC_DIGEST_SIZE;
+
+        commitments = __commit_x4(commitments, seeds, salt, round_u16, player, base_seeds, base_commitments);
+
+        () = #unspill(round, round_u16);
+        player = 12;
+        base_seeds = GET_LEAVES_2;
+        base_seeds += 12;
+        base_seeds *= TREE_DATA_SIZE;
+        base_commitments = round;
+        base_commitments *= PNC_N_MPC_PARTIES * PNC_DIGEST_SIZE;
+        base_commitments += 12 * PNC_DIGEST_SIZE;
+
+        commitments = __commit_x4(commitments, seeds, salt, round_u16, player, base_seeds, base_commitments);
+
+        unopened = s_unopened;
+        if(unopened != LAST_PLAYER)
+		{	
+			() = #unspill(round, proof_round);
+	        player = 15;
+	        base_seeds = GET_LEAVES_2;
+	        base_seeds += 15;
+	        base_seeds *= TREE_DATA_SIZE;
+	        base_commitments = round;
+	        base_commitments *= PNC_N_MPC_PARTIES * PNC_DIGEST_SIZE;
+	        base_commitments += 15 * PNC_DIGEST_SIZE;
+	        
+	        commitments = __commit_verify(commitments, seeds, proofs, salt, round, player, proof_round, base_seeds, base_commitments);
+        }
+    
+	    unopened = s_unopened;
+        idx = (64u) unopened;
+        idx *= PNC_DIGEST_SIZE;
+
+        () = #unspill(round, proof_round);
+        out_idx = round;
+        out_idx *= PNC_N_MPC_PARTIES * PNC_DIGEST_SIZE;
+        out_idx += idx; 
+
+        in_idx = proof_round;
+        in_idx *= PROOF_FULL_SIZE;
+        in_idx += PROOF_C_IDX;
+
+	    commitments = __copy_unnopened_party_commit(commitments, proofs, out_idx, in_idx);
+
+        () = #unspill(proof_round);
+        proof_round += 1;
+        () = #spill(proof_round);
+	}
+
+	() = #unspill(proof_round);
+	return commitments, tapes, proof_round;
+}
+
+
+inline fn __commitToViews(
+	reg ptr u8[SIG_CHALLENGE_C_SIZE] challenge_c,
+	stack u8[CV_FULL_SIZE] cv
+) -> stack u8[CV_FULL_SIZE]
+{
+	
+	reg u8 t8;
+	reg u16 t16;
+	reg u64 t t2 idx;
+
+	inline int z;
+
+	t = 0;
+	t16 = 0;
+	t2 = 0;
+	while( t < PNC_N_ROUNDS)
+	{
+		t8 = __contains_challengeC_2(challenge_c, t16);
+
+		if(t8 == 0)
+		{
+			idx = t;
+			idx *= CV_U64_ROUND_SIZE;
+			
+			for z=0 to CV_U64_ROUND_SIZE { cv[u64 (int)idx] = t2; idx += 1; }
+		}
+
+		t16 += 1;
+		t += 1;
+	}
+
+
+	return cv;
+}
+
+
+inline
+fn __recompute_mpc(
+	stack u8[SIG_CHALLENGE_P_SIZE] challengeP,
+	stack u8[SIG_CHALLENGE_C_SIZE] challengeC,
+	stack u8[SIG_PROOFS_SIZE] proofs,
+	stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+	stack u8[MZD_SIZE] m_plaintext,
+	stack u8[CV_FULL_SIZE] cv
+) -> stack u8[CV_FULL_SIZE], stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+	reg u16 t unopened;
+	reg u64 out_idx in_idx idx msgs_idx tapes_idx i;
+
+	#[mmy] reg u256 ymm0;
+
+	stack u8[MSGS_FULL_SIZE] msgs;
+	stack u8[MZD_SIZE] m_maskedKey;
+
+	stack u16 s_t s_unopened;
+	stack u64 proof_idx s_i;
+
+	inline int z;
+
+	i = 0;
+	while(i < PNC_N_OPENED_ROUNDS)
+	{
+
+		/* 2. When t is in C, we have everything we need to re-compute 	the view, as an honest signer
+	     * would.
+	     * We simulate the MPC with one fewer party; the unopned party's values are all set to zero.
+	    */
+
+	    t = challengeC[u16 (int)i];
+	    s_t = t;
+
+	    unopened = challengeP[u16 (int)i];
+	    s_unopened = unopened;
+	    s_i = i;
+
+	    t = s_t;
+	    out_idx = (64u)t;
+	    out_idx *= TAPES_FULL_SIZE;
+	    out_idx += TAPE_TAPES_IDX;
+	    
+		t = s_t;
+	    in_idx = __get_orderChallengeC(challengeC, t); 
+	    proof_idx = in_idx;
+	    in_idx *= PROOF_FULL_SIZE;
+	    in_idx += PROOF_AUX_IDX;
+
+	    tapes = __setAuxBits(tapes, proofs, out_idx, in_idx);
+
+	    t = s_t;
+	    out_idx = (64u)t;
+	    out_idx *= TAPES_FULL_SIZE;
+	    out_idx += TAPE_TAPES_IDX;
+
+	    unopened = s_unopened;
+	    idx = (64u) unopened;
+	    idx *= TAPE_SIZE_BYTES;
+	    out_idx += idx;
+
+	    ymm0 = #set0_256();
+
+	    // FILL the unrecomputed tape to zeros
+	    idx = 0;
+	    while(idx < TAPE_SIZE_BYTES)
+	    {
+	    	tapes.[u256 out_idx] = ymm0;
+
+	    	out_idx += 32;
+	    	idx += 32;
+	    }
+
+	    for z=0 to 16*4
+	    {
+	    	msgs[u256 z] = ymm0;
+	    }
+		
+	    unopened = s_unopened;
+		out_idx = (64u) unopened;
+		out_idx *= PNC_VIEW_SIZE;
+
+		in_idx = proof_idx; 
+	    in_idx *= PROOF_FULL_SIZE;
+	    in_idx += PROOF_MSGS_IDX;
+
+		msgs = __copy_msg_from_proofs_to_msgs( msgs, proofs, out_idx, in_idx);	
+
+		in_idx = proof_idx; 
+	    in_idx *= PROOF_FULL_SIZE;
+	    in_idx += PROOF_INPUT_IDX;
+
+		m_maskedKey = __mzd_from_char_array_2(m_maskedKey, proofs, in_idx);
+
+	    msgs_idx = 0;
+
+		t = s_t;
+		i = (64u) t;
+	    unopened = s_unopened;
+	    idx = (64u) unopened;
+
+		msgs = __simulateOnline_verify(m_maskedKey, tapes, msgs, m_plaintext, i, idx);
+
+		in_idx = proof_idx; 
+	    in_idx *= PROOF_FULL_SIZE;
+	    in_idx += PROOF_INPUT_IDX;
+
+	    t = s_t;
+	    out_idx = (64u) t;
+	    out_idx *= CV_ROUND_SIZE;
+ 			
+		cv = __commit_v_verify(cv, proofs, msgs, in_idx, out_idx);
+
+		i = s_i;
+		i = i + 1;
+	}
+	
+	return cv, tapes;
+}
+
+
+

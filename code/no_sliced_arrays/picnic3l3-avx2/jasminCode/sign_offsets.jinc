@@ -1,0 +1,2299 @@
+/* Sign path without per-round copies (offset arithmetic), transplanted from the
+ * for-loop L3 code so that L3 Sign is implemented like L5 Sign.
+ * Functions whose names already exist in this tree are prefixed with fl_. */
+
+require "params.jinc"
+require "keccak/keccak1600_updstate.jinc"
+require "keccak/keccak1600x4_updstate.jinc"
+
+namespace FL_A1 {
+  param int _ASIZE = 1;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+namespace FL_A1x4 {
+  param int _ASIZE = 1;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+namespace FL_A2 {
+  param int _ASIZE = 2;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+namespace FL_A256x4 {
+  param int _ASIZE = TAPE_SIZE_BYTES;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+namespace FL_A2x4 {
+  param int _ASIZE = 2;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+namespace FL_A32 {
+  param int _ASIZE = PNC_SALT_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+namespace FL_A32x4 {
+  param int _ASIZE = PNC_SALT_SIZE;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+namespace FL_A64x4 {
+  param int _ASIZE = 2 * MAX_SEED_SIZE_BYTES;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+namespace FL_N_2_PNC_SEED_SIZE {
+  param int _ASIZE = 2 * PNC_SEED_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+namespace FL_N_PNC_SEED_SIZE {
+  param int _ASIZE = PNC_SEED_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+namespace FL_N_TREE_DATA_SIZEx4 {
+  param int _ASIZE = TREE_DATA_SIZE;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+
+fn _masked_mzd_from_char_array(
+	#[poly=data] reg mut ptr u8[MZD_SIZE] result,
+	#[poly=data] reg ptr u8[PNC_N_ROUNDS * MZD_SIZE] data,
+	#[public] reg u64 pos
+) -> reg ptr u8[MZD_SIZE]
+{
+
+  reg u64 t;
+
+  inline int z;
+
+  for z=0 to MZD_U64_SIZE-1
+  {
+    t = data.[u64 pos];
+    t = #BSWAP_64(t);
+    result[u64 MZD_U64_SIZE - z - 2] = t;
+
+    pos += 8;
+  }
+
+	return result;
+}
+
+inline fn __fl_masked_mzd_from_char_array(
+	#[poly=data] stack u8[MZD_SIZE] result,
+	#[poly=data] stack u8[PNC_N_ROUNDS * MZD_SIZE] data,
+	#[public] reg u64 pos
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+	reg ptr u8[PNC_N_ROUNDS * MZD_SIZE] b;
+
+	a = result;
+	b = data;
+	a = _masked_mzd_from_char_array(a, b, pos);
+	result = a;
+
+	return result;
+}
+
+fn __fl_masked_mzd_to_char_array(
+	#[poly=data] reg mut ptr u8[PNC_N_ROUNDS * MZD_SIZE] dst,
+	#[poly=data] reg ptr u8[MZD_SIZE] data,
+	#[poly=data] reg ptr u8[MZD_SIZE] privKey,
+	#[public]    reg u64 pos
+) -> reg ptr u8[PNC_N_ROUNDS * MZD_SIZE]
+{
+	reg u64 tmp aux idx;
+
+	dst.[u64 pos + 24] = 0; // set last u64 word to 0
+
+	idx = MZD_SIZE - 16;
+	while(idx > 0)
+	{
+		
+		tmp = data.[u64 idx];
+		tmp = #BSWAP(tmp);
+
+		aux = MZD_SIZE - 16;
+		aux -= idx;
+		aux = privKey.[u64 aux];
+		
+		aux ^= tmp;
+		dst.[u64 pos] = aux;
+
+		pos += 8;
+		idx -= 8;
+	}
+
+	tmp = data.[u64 idx];
+	tmp = #BSWAP(tmp);
+
+	aux = MZD_SIZE - 16;
+	aux -= idx;
+	aux = privKey.[u64 aux];
+	
+	aux ^= tmp;
+	dst.[u64 pos] = aux;
+
+	return dst;
+}
+
+inline fn __fl_reg_to_stack_uint64_192(
+  #[poly=b] reg ptr u8[MZD_SIZE] a,
+  #[poly=b] stack u8[MZD_SIZE] b
+) -> stack u8[MZD_SIZE]
+{
+  reg u256 t;
+
+	t = a[u256 0];
+	b[u256 0] = t;
+
+  return b;
+}
+
+inline fn __fl_copy3Words_22(
+	#[poly=tmp] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] tree, 
+	#[poly=tmp] stack u8[4 * 2 * MAX_SEED_SIZE_BYTES] tmp, 
+	#[public]   reg u64 idx_1, 
+	#[public]   reg u64 idx_2
+) -> reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE]
+{
+	reg u64 t;
+
+	inline int z;
+
+	for z=0 to PNC_U64_INPUT_SIZE
+	{t = tmp.[u64 idx_2 + z * 8]; tree.[u64 idx_1 + z*8] = t;}
+
+	return tree;
+}
+
+inline fn __fl_copy_input_seed2(
+	#[poly=iSeedsTree] stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] output, 
+	#[poly=iSeedsTree] stack u8[TREE_NODES_1_SIZE] input, 
+	#[public]          reg u64 out_idx in_idx
+) -> stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE]
+{
+	reg u64 t;
+
+	inline int z;
+
+	for z=0 to PNC_U64_SEED_SIZE
+	{
+		t = input.[u64 in_idx + z * 8];
+		output.[u64 out_idx + z * 8] = t;
+
+	}
+
+	return output;
+}
+
+fn _fl_mzd_copy_uint64_192(
+	#[poly=y] reg ptr u8[MZD_SIZE] x,
+	#[poly=y] reg ptr u8[MZD_SIZE] y
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u256 t;
+	t = y[u256 0];
+	x[u256 0] = t;
+
+	return x;
+}
+
+inline fn __fl_mzd_copy_uint64_192(
+	#[poly=y] stack u8[MZD_SIZE] x,
+	#[poly=y] stack u8[MZD_SIZE] y
+) -> stack u8[MZD_SIZE]
+{
+
+	reg ptr u8[MZD_SIZE] a b;
+
+	a = x;
+	b = y;
+	a = _fl_mzd_copy_uint64_192(a,b);
+	x = a;
+	
+	return x;
+}
+
+fn _fl_mzd_xor_uint64_block(
+	#[secret] reg ptr u8[MZD_SIZE] r_block_j, 
+	#[secret] reg ptr u8[MZD_SIZE] f_block_j, 
+	#[secret] reg ptr u8[MZD_SIZE] s_block_j
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u256 t;
+
+	t = f_block_j[u256 0];
+	t ^= s_block_j[u256 0];
+	r_block_j[u256 0] = t;
+
+	return r_block_j;
+}
+
+inline fn __fl_mzd_xor_uint64_block(
+	#[secret] stack u8[MZD_SIZE] r_block_j, 
+	#[secret] stack u8[MZD_SIZE] f_block_j, 
+	#[secret] stack u8[MZD_SIZE] s_block_j
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b,c;
+
+	a = r_block_j;
+	b = f_block_j;
+	c = s_block_j; 
+
+	a = _fl_mzd_xor_uint64_block(a,b,c);
+
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+fn _fl_mzd_and_uint64_block(
+	#[secret] reg ptr u8[MZD_SIZE] r_block_j, 
+	#[secret] reg ptr u8[MZD_SIZE] f_block_j, 
+	#[secret] reg ptr u8[MZD_SIZE] s_block_j
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t;
+
+	t = f_block_j[u64 0];
+	t &= s_block_j[u64 0];
+	r_block_j[u64 0] = t;
+
+	t = f_block_j[u64 1];
+	t &= s_block_j[u64 1];
+	r_block_j[u64 1] = t;
+
+	t = f_block_j[u64 2];
+	t &= s_block_j[u64 2];
+	r_block_j[u64 2] = t;
+
+	return r_block_j;
+}
+
+inline fn __fl_mzd_and_uint64_block(
+	#[secret] stack u8[MZD_SIZE] r_block_j, 
+	#[secret] stack u8[MZD_SIZE] f_block_j, 
+	#[secret] stack u8[MZD_SIZE] s_block_j
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b,c;
+
+	a = r_block_j;
+	b = f_block_j;
+	c = s_block_j; 
+
+	a = _fl_mzd_and_uint64_block(a,b,c);
+
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+fn _fl_mzd_shift2_left_uint64_192(
+	#[poly=block] reg ptr u8[MZD_SIZE] r_block,
+	#[poly=block] reg ptr u8[MZD_SIZE] block
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t1 t2;
+
+
+	t1  = block[u64 2];
+	t2 = block[u64 1];
+
+	t1 = t1 << 2;
+	t2 = t2 >> 62;
+	t1 |= t2;
+
+	r_block[u64 2] = t1;
+
+
+	t1  = block[u64 1];
+	t2 = block[u64 0];
+
+	t1 = t1 << 2;
+	t2 = t2 >> 62;
+	t1 |= t2;
+
+	r_block[u64 1] = t1;
+
+
+	t1  = block[u64 0];
+	
+	t1 = t1 << 2;
+
+	r_block[u64 0] = t1;
+
+	return r_block;
+}
+
+inline fn __fl_mzd_shift2_left_uint64_192(
+	#[poly=block] stack u8[MZD_SIZE] r_block_j, 
+	#[poly=block] stack u8[MZD_SIZE] block
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b;
+
+	a = r_block_j;
+	b = block;
+	a = _fl_mzd_shift2_left_uint64_192(a,b);
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+fn _fl_mzd_shift1_left_uint64_192(
+	#[poly=block] reg ptr u8[MZD_SIZE] r_block,
+	#[poly=block] reg ptr u8[MZD_SIZE] block
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t1 t2;
+
+	t1  = block[u64 2];
+	t2 = block[u64 1];
+
+	t1 = t1 << 1;
+	t2 = t2 >> 63;
+	t1 |= t2;
+
+	r_block[u64 2] = t1;
+
+
+	t1  = block[u64 1];
+	t2 = block[u64 0];
+
+	t1 = t1 << 1;
+	t2 = t2 >> 63;
+	t1 |= t2;
+
+	r_block[u64 1] = t1;
+
+
+	t1  = block[u64 0];
+	
+	t1 = t1 << 1;
+
+	r_block[u64 0] = t1;
+	
+	return r_block;
+}
+
+inline fn __fl_mzd_shift1_left_uint64_192(
+	#[poly=block] stack u8[MZD_SIZE] r_block_j, 
+	#[poly=block] stack u8[MZD_SIZE] block
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b;
+
+	a = r_block_j;
+	b = block;
+
+	a = _fl_mzd_shift1_left_uint64_192(a,b);
+
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+fn _fl_mzd_shift2_right_uint64_192(
+	#[poly=block] reg ptr u8[MZD_SIZE] r_block,
+	#[poly=block] reg ptr u8[MZD_SIZE] block
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t1 t2;
+
+	t1  = block[u64 0];
+	t2 = block[u64 1];
+
+	t1 = t1 >> 2;
+	t2 = t2 << 62;
+	t1 |= t2;
+
+	r_block[u64 0] = t1;
+
+
+	t1  = block[u64 1];
+	t2 = block[u64 2];
+
+	t1 = t1 >> 2;
+	t2 = t2 << 62;
+	t1 |= t2;
+
+	r_block[u64 1] = t1;
+
+
+	t1  = block[u64 2];
+	
+	t1 = t1 >> 2;
+
+	r_block[u64 2] = t1;
+
+	return r_block;
+}
+
+inline fn __fl_mzd_shift2_right_uint64_192(
+	#[poly=block] stack u8[MZD_SIZE] r_block_j, 
+	#[poly=block] stack u8[MZD_SIZE] block
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b;
+
+	a = r_block_j;
+	b = block;
+
+	a = _fl_mzd_shift2_right_uint64_192(a,b);
+
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+fn _fl_mzd_shift1_right_uint64_192(
+	#[poly=block] reg ptr u8[MZD_SIZE] r_block,
+	#[poly=block] reg ptr u8[MZD_SIZE] block
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t1 t2;
+
+	t1  = block[u64 0];
+	t2 = block[u64 1];
+
+	t1 = t1 >> 1;
+	t2 = t2 << 63;
+	t1 |= t2;
+
+	r_block[u64 0] = t1;
+
+
+	t1  = block[u64 1];
+	t2 = block[u64 2];
+
+	t1 = t1 >> 1;
+	t2 = t2 << 63;
+	t1 |= t2;
+
+	r_block[u64 1] = t1;
+
+
+	t1  = block[u64 2];
+	
+	t1 = t1 >> 1;
+
+	r_block[u64 2] = t1;
+
+	return r_block;
+}
+
+inline fn __fl_mzd_shift1_right_uint64_192(
+	#[poly=block] stack u8[MZD_SIZE] r_block_j, 
+	#[poly=block] stack u8[MZD_SIZE] block
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b;
+
+	a = r_block_j;
+	b = block;
+
+	a = _fl_mzd_shift1_right_uint64_192(a,b);
+
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+fn _fl_mzd_addmul_v_uint64_192(
+	#[secret] reg ptr u8[MZD_SIZE] c_block vptr,
+	#[secret] reg ptr u64[MATRIX_ROUND] a_block
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 i1 i2 v mask base_matrix;
+	reg u128 xmm0 xmm1 xmm4 xmm5;
+	reg u256 ymm0 ymm1 ymm2 ymm3;
+
+	
+	ymm2 = c_block[:u256 0];
+	ymm3 = #set0_256();
+
+
+	i1 = 0;
+	base_matrix = 0;
+	while( i1 < MZD_SIZE-8)
+	{
+		v = vptr.[:u64 i1];
+
+		i2 = 0;
+		while( i2 < 64)
+		{
+			// mask = rax; v = rsi;
+
+			mask = v;									// movq		%rsi, %rax
+			base_matrix += 128;							// subq		$-128, %rcx
+			mask &= 1;									// andl		$1, %eax
+			_, _, _, _, _, mask = #NEG_64(mask);		// negq		%rax
+
+			xmm0 = (128u) mask;							// vmovq 	%rax, %xmm0
+			mask = v;									// movq		%rsi, %rax
+			_, _, _, _, _, mask = #SAL(mask,62);		// salq		$62, %rax
+			ymm0 = #VPBROADCAST_4u64(xmm0);				// vpbroadcastq	%xmm0, %ymm0
+			ymm0 &= a_block.[:u256 base_matrix - 128];	// vpand	-128(%rcx), %ymm0, %ymm0
+			_, _, _, _, _, mask = #SAR(mask,63);		// sarq		$63, %rax
+
+			xmm1 = (128u) mask;							// vmovq	%rax, %xmm1
+			mask = v;									// movq		%rsi, %rax
+			ymm2 ^= ymm0;								// vpxor	%ymm2, %ymm0, %ymm2
+			_, _, _, _, _, mask = #SAL(mask,61);		// salq		$61, %rax
+			ymm1 = #VPBROADCAST_4u64(xmm1);				// vpbroadcastq	%xmm1, %ymm1
+			ymm1 &= a_block.[:u256 base_matrix - 96];	// vpand	-96(%rcx), %ymm1, %ymm1
+			_, _, _, _, _, mask = #SAR(mask,63);		// sarq		$63, %rax
+
+			xmm4 = (128u) mask;							// vmovq	%rax, %xmm4
+			mask = v;									// movq		%rsi, %rax
+			v >>= 4;									// shrq		$4, %rsi
+			_, _, _, _, _, mask = #SAL(mask,60);		// salq		$60, %rax
+			ymm0 = #VPBROADCAST_4u64(xmm4);				// vpbroadcastq	%xmm4, %ymm0
+			ymm0 &= a_block.[:u256 base_matrix - 64];	// vpand	-64(%rcx), %ymm0, %ymm0
+			_, _, _, _, _, mask = #SAR(mask,63);		// sarq		$63, %rax
+
+			xmm5 = (128u) mask;							// vmovq	%rax, %xmm5
+			ymm2 ^= ymm0;								// vpxor	%ymm0, %ymm2, %ymm2
+			ymm0 = #VPBROADCAST_4u64(xmm5);				// vpbroadcastq	%xmm5, %ymm0
+			ymm0 &= a_block.[:u256 base_matrix - 32];	// vpand	-32(%rcx), %ymm0, %ymm0
+			ymm0 ^= ymm1;								// vpxor	%ymm1, %ymm0, %ymm0
+			ymm3 ^= ymm0;								// vpxor	%ymm3, %ymm0, %ymm3
+
+			i2 += 4;
+		}
+
+		i1 += 8;
+	}
+
+	ymm3 ^= ymm2;			// vpxor	%ymm2, %ymm3, %ymm3
+	c_block[:u256 0] = ymm3; // vmovdqa	%ymm3, (%rdi)
+
+	return c_block;
+}
+
+inline fn __fl_mzd_addmul_v_uint64_192(
+	#[secret] stack u8[MZD_SIZE] c_block vptr,
+	#[secret] stack u64[MATRIX_ROUND] a_block
+) -> stack u8[MZD_SIZE]
+{
+
+	reg ptr u8[MZD_SIZE] a b;
+	reg ptr u64[MATRIX_ROUND] c;
+	
+	a = c_block;
+	b = vptr;
+	c = a_block;
+
+	a = _fl_mzd_addmul_v_uint64_192(a,b,c);
+
+	c_block = a;
+
+	return c_block;
+}
+
+inline fn __fl_mzd_mul_v_uint64_192(
+	#[secret] stack u8[MZD_SIZE] c_block,
+	#[secret] stack u8[MZD_SIZE] vptr,
+	#[secret] stack u64[MATRIX_ROUND] k_matrix_
+) -> stack u8[MZD_SIZE]
+{
+	reg u256 ymm0;
+	reg ptr u8[MZD_SIZE] a b;
+	reg ptr u64[MATRIX_ROUND] c;
+
+	a = c_block;
+	b = vptr;
+	c = k_matrix_;
+
+	ymm0 = #set0_256();
+	a[:u256 0] = ymm0;
+
+	a = _fl_mzd_addmul_v_uint64_192(a,b,c);
+
+	c_block = a;
+
+	return c_block;
+}
+
+fn _mzd_from_bitstream_tapes2(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[secret] reg ptr u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t;
+
+	inline int i;
+	for i=0 to MZD_U64_SIZE-1
+	{
+		t = bs.[u64 pos];
+		t = #BSWAP_64(t);
+		v[u64 MZD_U64_SIZE - 2 - i] = t;
+
+		pos += 8;
+
+	}
+
+	return v;
+}
+
+inline fn __mzd_to_bitstream_tapes2(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[secret] stack u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+/*
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	bs = _mzd_to_bitstream_tapes2(bs,a,pos);
+*/
+	reg u64 t;
+	inline int i;
+
+	for i=0 to MZD_U64_SIZE-1
+	{
+		t = v[u64 MZD_U64_SIZE - 2 - i];
+		t = #BSWAP_64(t);
+		bs.[u64 pos] = t;
+
+		pos += 8;
+	}
+
+	return bs;
+}
+
+fn _mzd_from_bitstream_full_tapes(
+	#[poly=v] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[poly=v] reg ptr u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t;
+	inline int z;
+
+	for z=0 to 3
+	{
+		t = bs.[u64 (int)pos + z * 8];
+		t = #BSWAP_64(t);
+		v[u64 2 - z] = t;
+	}
+
+	return v;
+}
+
+inline fn __mzd_from_bitstream_full_tapes(
+	#[poly=v] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[poly=v] stack u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	a = _mzd_from_bitstream_full_tapes(bs,a,pos);
+	v = a;
+
+	return v;
+}
+
+fn _mzd_from_bitstream2_full_msgs(
+	#[poly=v] reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] bs,
+	#[poly=v] reg ptr u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t;
+	inline int z;
+
+	for z=0 to 3
+	{
+		t = bs.[u64 pos + z * 8];
+		t = #BSWAP_64(t);
+		v[u64 MZD_U64_SIZE - 2 - z] = t;
+	}
+
+	return v;
+}
+
+inline fn __mzd_from_bitstream2_full_msgs(
+	#[poly=v] reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] bs,
+	#[poly=v] stack u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	a = _mzd_from_bitstream2_full_msgs(bs, a, pos);
+	v = a;
+
+	return v;
+}
+
+#[returnaddress="stack"]
+fn _mzd_from_bitstream_verify(
+	#[poly=bs] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[poly=v]  reg ptr u8[MZD_SIZE] v,
+	#[public]  reg 	u64 pos
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t;
+	inline int z;
+
+	for z=0 to 3
+	{
+		t = bs.[u64 (int)pos + z * 8];
+		t = #BSWAP_64(t);
+		v[u64 MZD_U64_SIZE - 2 - z] = t;
+	}
+
+	return v;
+}
+
+inline fn __mzd_from_bitstream_verify(
+	#[poly=bs] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[poly=v]  stack u8[MZD_SIZE] v,
+	#[public]  reg 	u64 pos
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	a = _mzd_from_bitstream_verify(bs,a,pos);
+	v = a;
+	
+	return v;
+}
+
+#[returnaddress="stack"]
+fn _mzd_to_bitstream2_full_msgs(
+	#[poly=v] reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] bs,
+	#[poly=v] reg ptr u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+	reg u64 t;
+	inline int z;
+
+	for z = 0 to 3{
+		t = v[u64 2 - z];
+		t = #BSWAP_64(t);
+		bs.[u64 (int)pos + z * 8] = t;
+	}
+	
+	return bs;
+}
+
+inline fn __mzd_to_bitstream2_full_msgs(
+	#[poly=v] reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] bs,
+	#[poly=v] stack u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	bs = _mzd_to_bitstream2_full_msgs(bs,a,pos);
+
+	return bs;
+}
+
+#[returnaddress="stack"]
+fn _hashSeed_22(
+  #[secret]         reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] out,
+  #[poly=inputSeed] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] inputSeed,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public]         reg u64 inputSeed_idx,
+  #[poly=repIndex]  reg u16 repIndex,
+  #[poly=nodeIndex] reg u16 nodeIndex
+) -> reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+  reg u64 t;
+  inline int z;
+
+  stack u8[1] prefix_s;
+  stack u8[2] t16_s;
+  stack u8[PNC_SEED_SIZE] seed_s;
+
+  reg ptr u8[1] prefix;
+  reg ptr u8[2] t16;
+  reg ptr u8[PNC_SEED_SIZE] seed;
+  reg ptr u8[2 * PNC_SEED_SIZE] reg_out;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(out, salt, repIndex, nodeIndex);
+
+  for z = 0 to PNC_SEED_SIZE / 8 {
+    t = inputSeed.[u64 inputSeed_idx + z * 8];
+    seed_s[u64 z] = t;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  len = 1;
+  prefix_s[0] = HASH_PREFIX_1;
+  prefix = prefix_s;
+  pst = FL_A1::_update_updstate_avx2(pst, prefix, len);
+
+  seed = seed_s;
+  len = PNC_SEED_SIZE;
+  pst = FL_N_PNC_SEED_SIZE::_update_updstate_avx2(pst, seed, len);
+
+  () = #unspill(salt);
+  len = PNC_SALT_SIZE;
+  pst = FL_A32::_update_updstate_avx2(pst, salt, len);
+
+  len = 2;
+  () = #unspill(repIndex);
+  t16_s[:u16 0] = repIndex;
+  t16 = t16_s;
+  pst = FL_A2::_update_updstate_avx2(pst, t16, len);
+
+  len = 2;
+  () = #unspill(nodeIndex);
+  t16_s[:u16 0] = nodeIndex;
+  t16 = t16_s;
+  pst = FL_A2::_update_updstate_avx2(pst, t16, len);
+  pst = _finish_updstate_avx2(pst);
+
+  /*******************************************/
+  /* APPLY PERMUTATION TO STATE AND RETRIEVE */
+  /*******************************************/
+  len = 2 * PNC_SEED_SIZE;
+  () = #unspill(out);
+  reg_out = out[0:2 * PNC_SEED_SIZE];
+  _, reg_out = FL_N_2_PNC_SEED_SIZE::_squeeze_updstate_avx2(pst, reg_out, len);
+  out[0:2 * PNC_SEED_SIZE] = reg_out;
+
+  return out;
+}
+
+inline fn __hashSeed_22(
+  #[secret]         stack u8[4 * 2 * MAX_SEED_SIZE_BYTES] digest,
+  #[poly=inputSeed] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] inputSeed,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt, 
+  #[public]         reg u64 inputSeed_idx,
+  #[poly=repIndex]  reg u16 repIndex, 
+  #[poly=nodeIndex] reg u16 nodeIndex
+) -> stack u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+  reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] a;
+  
+  a = digest;
+  a = _hashSeed_22(a, inputSeed, salt, inputSeed_idx, repIndex, nodeIndex);
+  digest = a;
+
+  return digest;
+}
+
+#[returnaddress="stack"]
+fn _hashSeed_x4_22(
+  #[secret]         reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] out,
+  #[poly=inputSeed] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] inputSeed,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt, 
+  #[public]         reg u64 inputSeed_idx,
+  #[poly=repIndex]  reg u16 repIndex, 
+  #[poly=nodeIndex] reg u16 nodeIndex
+) -> reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+
+  reg u64 i t;
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+
+  stack u8[1] prefix_s;
+  stack u8[2] t16b_s;
+  stack u8[8] t16x4;
+  stack u8[TREE_DATA_SIZE*4] buf;
+
+  reg ptr u8[1] prefix;
+  reg ptr u8[2] t16b t16x40 t16x41 t16x42 t16x43;
+  reg ptr u8[TREE_DATA_SIZE] buf0, buf1, buf2, buf3;
+  reg ptr u8[2 * MAX_SEED_SIZE_BYTES] out0, out1, out2, out3;
+
+  stack u64[4*25+1] s_st;
+  reg ptr u64[4*25+1] st;
+
+  inline int z;
+
+  () = #spill(out, inputSeed, inputSeed_idx, salt, repIndex, nodeIndex);
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  x = (R136 >> 3);
+  y = SHAKE;
+  st = s_st;
+  st = _init_updstate_avx2x4(st, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  len = 1;
+  prefix_s[u8 0] = HASH_PREFIX_1;
+  prefix = prefix_s;
+  st = FL_A1x4::_absorb_bcast_updstate_avx2x4(st, prefix, len);
+
+  () = #unspill(inputSeed);
+  () = #unspill(inputSeed_idx);
+  for z=0 to TREE_DATA_SIZE*4/8
+  {
+    t = inputSeed.[:u64 inputSeed_idx+z*8];
+    buf[:u64 z] = t;
+  }
+  () = #spill(inputSeed);
+  () = #spill(inputSeed_idx);
+
+  len = TREE_DATA_SIZE;
+  buf0 = buf[0:TREE_DATA_SIZE];
+  buf1 = buf[TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf2 = buf[2*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf3 = buf[3*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  st = FL_N_TREE_DATA_SIZEx4::_absorb_updstate_avx2x4(st, buf0, buf1, buf2, buf3, len);
+
+  len = 32;
+  () = #unspill(salt);
+  st = FL_A32x4::_absorb_bcast_updstate_avx2x4(st, salt, len);
+
+  len = 2;
+  () = #unspill(repIndex);
+  t16b_s[u16 0] = repIndex;
+  t16b = t16b_s;
+  st = FL_A2x4::_absorb_bcast_updstate_avx2x4(st, t16b, len);
+
+  () = #unspill(nodeIndex);
+  t16x4[u16 0] = nodeIndex;
+  nodeIndex += 1;
+  t16x4[u16 1] = nodeIndex;
+  nodeIndex += 1;
+  t16x4[u16 2] = nodeIndex;
+  nodeIndex += 1;
+  t16x4[u16 3] = nodeIndex;
+
+  t16x40 = t16x4[0:2];
+  t16x41 = t16x4[2:2];
+  t16x42 = t16x4[4:2];
+  t16x43 = t16x4[6:2];
+
+  len = 2;
+  st = FL_A2x4::_absorb_updstate_avx2x4(st, t16x40, t16x41, t16x42, t16x43, len);
+  st = _finish_updstate_avx2x4(st);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  () = #unspill(out);
+
+  len = 2 * PNC_SEED_SIZE;
+  out0 = out[0:2 * MAX_SEED_SIZE_BYTES];
+  out1 = out[2*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES];
+  out2 = out[4*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES];
+  out3 = out[6*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES];
+  _, out0, out1, out2, out3 =
+    FL_A64x4::_squeeze_updstate_avx2x4(st, out0, out1, out2, out3, len);
+
+  out[0:2 * MAX_SEED_SIZE_BYTES] = out0;
+  out[2*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES] = out1;
+  out[4*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES] = out2;
+  out[6*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES] = out3;
+
+  return out;
+}
+
+inline fn __hashSeed_x4_22(
+  #[secret]         stack u8[4 * 2 * MAX_SEED_SIZE_BYTES] digest,
+  #[poly=inputSeed] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] inputSeed,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt, 
+  #[public] reg     u64 inputSeed_idx,
+  #[poly=repIndex]  reg u16 repIndex, 
+  #[poly=nodeIndex] reg u16 nodeIndex
+) -> stack u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+  reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] a;
+
+  a = digest;
+  a = _hashSeed_x4_22(a, inputSeed, salt, inputSeed_idx, repIndex,nodeIndex);
+  digest = a;
+
+  return digest;
+}
+
+#[returnaddress="stack"]
+fn __hashTapes2_x4(
+  #[secret]  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] out,
+  #[secret]  reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  #[secret]  reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public]  reg u64 round,
+  #[public]  reg u16 player,
+  #[public]  reg u64 base_seeds base_out
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+
+  reg u16 t16;
+  reg u64 i t;
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+
+  stack u8[2] t16b_s;
+  stack u8[8] t16x4;
+  stack u8[TREE_DATA_SIZE*4] buf;
+  stack u8[4 * TAPE_SIZE_BYTES] bufOut;
+
+  reg ptr u8[2] t16b t16x40 t16x41 t16x42 t16x43;
+  reg ptr u8[TREE_DATA_SIZE] buf0, buf1, buf2, buf3;
+  reg ptr u8[TAPE_SIZE_BYTES] out0, out1, out2, out3;
+
+  stack u64[4*25+1] s_st;
+  reg ptr u64[4*25+1] st;
+
+  inline int z;
+
+  () = #spill(out);
+  () = #spill(seeds);
+  () = #spill(salt);
+  () = #spill(round);
+  () = #spill(player);
+  () = #spill(base_seeds);
+  () = #spill(base_out);
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  x = (R136 >> 3);
+  y = SHAKE;
+  st = s_st;
+  st = _init_updstate_avx2x4(st, x, y);
+
+  () = #unspill(seeds);
+  () = #unspill(base_seeds);
+  for z=0 to TREE_DATA_SIZE*4/8
+  {
+    t = seeds.[u64 base_seeds];
+    buf.[u64 z*8] = t;
+    base_seeds += 8;
+  }
+  () = #spill(seeds);
+  () = #spill(base_seeds);
+
+  len = TREE_DATA_SIZE;
+  buf0 = buf[0:TREE_DATA_SIZE];
+  buf1 = buf[TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf2 = buf[2*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf3 = buf[3*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  st = FL_N_TREE_DATA_SIZEx4::_absorb_updstate_avx2x4(st, buf0, buf1, buf2, buf3, len);
+
+  len = 32;
+  () = #unspill(salt);
+  st = FL_A32x4::_absorb_bcast_updstate_avx2x4(st, salt, len);
+
+  len = 2;
+  () = #unspill(round);
+  t16 = round;
+  t16b_s[u16 0] = t16;
+  t16b = t16b_s[0:2];
+  st = FL_A2x4::_absorb_bcast_updstate_avx2x4(st, t16b, len);
+
+  () = #unspill(player);
+  t16x4[u16 0] = player;
+  player += 1;
+  t16x4[u16 1] = player;
+  player += 1;
+  t16x4[u16 2] = player;
+  player += 1;
+  t16x4[u16 3] = player;
+
+  t16x40 = t16x4[0:2];
+  t16x41 = t16x4[2:2];
+  t16x42 = t16x4[4:2];
+  t16x43 = t16x4[6:2];
+
+  len = 2;
+  st = FL_A2x4::_absorb_updstate_avx2x4(st, t16x40, t16x41, t16x42, t16x43, len);
+  st = _finish_updstate_avx2x4(st);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  len = TAPE_SIZE_BYTES;
+  out0 = bufOut[0:TAPE_SIZE_BYTES];
+  out1 = bufOut[TAPE_SIZE_BYTES:TAPE_SIZE_BYTES];
+  out2 = bufOut[2*TAPE_SIZE_BYTES:TAPE_SIZE_BYTES];
+  out3 = bufOut[3*TAPE_SIZE_BYTES:TAPE_SIZE_BYTES];
+  _, out0, out1, out2, out3 =
+    FL_A256x4::_squeeze_updstate_avx2x4(st, out0, out1, out2, out3, len);
+  bufOut[0:TAPE_SIZE_BYTES] = out0;
+  bufOut[TAPE_SIZE_BYTES:TAPE_SIZE_BYTES]= out1;
+  bufOut[2*TAPE_SIZE_BYTES:TAPE_SIZE_BYTES] = out2;
+  bufOut[3*TAPE_SIZE_BYTES:TAPE_SIZE_BYTES] = out3;
+
+  () = #unspill(out);
+  () = #unspill(base_out);
+  i=0;
+  while(i < TAPE_SIZE_BYTES*4)
+  {
+    t = bufOut.[u64 i];
+    out.[u64 base_out] = t;
+    base_out += 8;
+    i += 8;
+  }
+
+  return out;
+}
+
+inline
+fn _fl_getParent(#[public] reg u64 node) -> reg u64
+{
+
+  if(node != 0){
+  	  node += 1;
+  	  node >>= 1;
+  	  node -= 1;
+  }
+
+  return node;	  
+}
+
+fn __fl_exists_22(
+  #[public] reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] tree,
+  #[public] reg u64 idx,
+  #[public] reg u8 t
+) -> reg u8
+{
+
+  t = 0;
+  if(idx < PNC_N_ROUNDS * TREE_NUM_NODES_2)
+  {
+    t = tree[idx];
+  }
+
+  return t;
+}
+
+#[returnaddress="stack"]
+fn _expandSeeds_22(
+  #[secret]        reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] tree,
+  #[public]        reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] tree_have,
+  #[public]        reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] tree_exists,
+  #[poly=salt]     reg ptr u8[PNC_SALT_SIZE] salt, 
+  #[public]        reg u64 treeIndex
+) -> reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE], reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2], reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2]
+{
+    
+  stack u16 s_repIndex;
+  stack u64 s_x s_y s_a s_lastNonLeaf s_treeIndex;
+  
+  reg u64 lastNonLeaf;
+  reg u64 x y z a b;
+  reg u16 node_idx repIndex;
+  reg u8  t8;
+
+  stack u8[4 * 2 * MAX_SEED_SIZE_BYTES] tmp;
+
+  stack ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] s_tree;
+  stack ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] s_tree_have;
+  stack ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] s_tree_exists;
+  stack ptr u8[PNC_SALT_SIZE] s_salt;
+
+  s_tree = tree;
+  s_tree_have = tree_have;
+  s_tree_exists = tree_exists;
+  s_salt = salt;
+  repIndex = treeIndex;
+  s_repIndex = repIndex;
+  treeIndex *= TREE_NUM_NODES_2;
+  s_treeIndex = treeIndex;
+
+  /* Walk the tree, expanding seeds where possible. Compute children of * non-leaf nodes. */
+
+    lastNonLeaf = TREE_NUM_NODES_2;
+    lastNonLeaf -= 1;
+    lastNonLeaf = _fl_getParent(lastNonLeaf);
+
+
+    /* expand the first 4 seeds */
+    
+    x = 0;
+    y = 2;
+    if(lastNonLeaf < y){ y = lastNonLeaf; }
+    s_lastNonLeaf = lastNonLeaf;
+
+    while( x <= y )
+    {
+      s_x = x;
+      s_y = y;
+      treeIndex = s_treeIndex;
+      treeIndex += x;
+
+      tree_have = s_tree_have;
+      t8 = tree_have[treeIndex];
+      s_tree_have = tree_have;
+
+      if(t8 == 1)
+      { 
+        z = treeIndex;
+        z *= PNC_SEED_SIZE;
+        node_idx = x;
+
+        tree = s_tree;
+        salt = s_salt;
+        repIndex = s_repIndex;
+        tmp = __hashSeed_22(tmp, tree, salt, z, repIndex, node_idx);
+
+        z = s_x;
+        z <<= 1;
+        z += 1;
+        treeIndex = s_treeIndex;
+        z += treeIndex;
+        tree_have = s_tree_have;
+        t8 = tree_have[(int) z];
+        
+        if(t8 == 0)
+        {
+          /* left child = H_left(seed_i || salt || t || i) */
+
+          tree_have[z] = 1;
+
+          b = 0;
+          z *= PNC_SEED_SIZE;
+          tree = s_tree;
+          tree = __fl_copy3Words_22(tree, tmp, z, b);
+          s_tree = tree;
+        }
+        s_tree_have = tree_have;
+
+        /* The last non-leaf node will only have a left child when there are an odd number of leaves */
+        
+        z = s_x;
+        z <<= 1;
+        z += 2;
+        treeIndex = s_treeIndex;
+        z += treeIndex;
+
+        tree_exists = s_tree_exists;
+        t8 = __fl_exists_22(tree_exists, z, t8);
+        if(t8 == 1)
+        { 
+          
+          tree_have = s_tree_have;
+          t8 = tree_have[z];
+          
+          if(t8 == 0)
+          {
+            
+            /* right child = H_right(seed_i || salt || t || i)  */
+
+            tree_have[z] = 1;
+            
+            b = PNC_SEED_SIZE;
+            z *= PNC_SEED_SIZE;
+            
+            tree = s_tree;
+            tree = __fl_copy3Words_22(tree, tmp, z, b);
+            s_tree = tree;
+            
+          }
+          
+          s_tree_have = tree_have;
+        }
+
+      }
+      x = s_x;
+      y = s_y;
+      x += 1;
+    }
+
+    /* now hash in groups of 4 for faster hashing */
+    y = s_lastNonLeaf;
+    y >>= 2;
+    y <<= 2;
+
+    while(x <= y)
+    {
+      s_x = x;
+      s_y = y;
+
+      z = x;
+      treeIndex = s_treeIndex;
+      z += treeIndex;
+      z *= PNC_SEED_SIZE;
+      node_idx = x;
+      
+
+      tree = s_tree;
+      salt = s_salt;
+      repIndex = s_repIndex;
+      tmp = __hashSeed_x4_22( tmp, tree, salt, z, repIndex, node_idx);
+
+      a = 0;
+      while(a < 4)
+      {
+        s_a = a;
+        x = s_x;
+        treeIndex = s_treeIndex;
+        x += treeIndex;
+        tree_have = s_tree_have;
+        t8 = tree_have[(int) x];
+
+        if(t8 == 1)
+        {
+          z = s_x;
+          z <<= 1;
+          z += 1;
+          treeIndex = s_treeIndex;
+          z += treeIndex;
+          tree_have = s_tree_have;
+          t8 = tree_have[(int) z];
+
+          if(t8 == 0)
+          {
+            /* left child = H_left(seed_i || salt || t || j) */
+            
+            b = s_a;
+            b *= 2;
+            b *= MAX_SEED_SIZE_BYTES;
+            
+            tree_have[(int)z] = 1;
+
+            z *= PNC_SEED_SIZE; // Set index to pointer
+            tree = s_tree;
+            tree = __fl_copy3Words_22(tree, tmp, z, b);
+            s_tree = tree;
+          }
+          s_tree_have = tree_have;
+
+          z = s_x;
+          z <<= 1;
+          z += 2;
+          treeIndex = s_treeIndex;
+          z += treeIndex;
+
+          /* The last non-leaf node will only have a left child when there are an odd number of leaves */
+          tree_exists = s_tree_exists;
+          t8 = __fl_exists_22(tree_exists, z, t8);
+
+          if(t8 == 1)
+          {
+            tree_have = s_tree_have;
+            t8 = tree_have[(int) z];
+            if(t8 == 0)
+            {
+              /* right child = H_right(seed_i || salt || t || j)  */
+
+              b = s_a;
+              b *= 2;
+              b *= MAX_SEED_SIZE_BYTES;
+              b += PNC_SEED_SIZE;
+              
+              tree_have[(int) z] = 1;
+
+              z *= PNC_SEED_SIZE; // Set index to pointer
+              tree = s_tree;
+              tree = __fl_copy3Words_22(tree, tmp, z, b);
+              s_tree = tree;
+            }
+            s_tree_have = tree_have; 
+          }
+        }
+        s_tree_have = tree_have;
+        a = s_a;
+        a += 1;
+        s_x += 1;
+      }
+      x = s_x;
+      y = s_y;
+    }
+
+    /* handle last few, which are not a multiple of 4 */
+    y = s_lastNonLeaf;
+    while(x <= y)
+    {
+      s_x = x;
+      s_y = y;
+      z = x;
+      treeIndex = s_treeIndex;
+      z += treeIndex;
+      tree_have = s_tree_have;
+      t8 = tree_have[(int) z];
+      s_tree_have = tree_have;
+
+      if(t8 == 1)
+      {
+        z *= PNC_SEED_SIZE;
+        x = s_x;
+        node_idx = x;
+
+        tree = s_tree;
+        salt = s_salt;
+        repIndex = s_repIndex;
+        tmp = __hashSeed_22( tmp, tree, salt, z, repIndex, node_idx);
+
+        z = s_x;
+        z <<= 1;
+        z += 1;
+        treeIndex = s_treeIndex;
+        z += treeIndex;
+
+        tree_have = s_tree_have;
+        t8 = tree_have[(int) z];
+        
+        if( t8 == 0)
+        {
+          /* left child = H_left(seed_i || salt || t || i) */
+
+          tree_have[(int)z] = 1;
+
+          b = 0;
+          z *= PNC_SEED_SIZE;
+          tree = s_tree;
+          tree = __fl_copy3Words_22(tree, tmp, z, b);
+          s_tree = tree; 
+        }
+        s_tree_have = tree_have;
+
+        /* The last non-leaf node will only have a left child when there are an odd number of leaves */
+        
+        z = s_x;
+        z <<= 1;
+        z += 2;
+        treeIndex = s_treeIndex;
+        z += treeIndex;
+
+        tree_exists = s_tree_exists;
+        t8 = __fl_exists_22(tree_exists, z, t8);
+        s_tree_exists = tree_exists;
+        
+        if(t8 == 1)
+        {
+          tree_have = s_tree_have;
+          t8 = tree_have[(int) z];
+
+          if(t8 == 0)
+          {
+            /* right child = H_right(seed_i || salt || t || i)  */
+
+            tree_have[(int) z] = 1;
+
+            b = PNC_SEED_SIZE;
+            z *= PNC_SEED_SIZE;
+            tree = s_tree;
+            tree = __fl_copy3Words_22(tree, tmp, z, b);
+            s_tree = tree;
+            
+          }
+          s_tree_have = tree_have;
+        }
+      }
+
+      y = s_y;
+      x = s_x;
+      x += 1;
+    }
+
+    tree = s_tree;
+    tree_have = s_tree_have;
+    tree_exists = s_tree_exists;
+    return tree, tree_have, tree_exists;
+}
+
+inline fn __expandSeeds_22(
+  #[secret]        stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] tree,
+  #[public]        stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] tree_have,
+  #[public]        stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] tree_exists,
+  #[poly=salt]    
+   stack u8[PNC_SALT_SIZE] salt, 
+  #[public]        reg u64 treeIndex
+) -> stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE], stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2], stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2]
+{
+
+  reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] a;
+  reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] b;
+  reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] c;
+  reg ptr u8[PNC_SALT_SIZE] d; 
+
+  a = tree;
+  b = tree_have;
+  c = tree_exists;
+  d = salt;
+  a,b,c = _expandSeeds_22(a,b,c,d,treeIndex);
+  tree = a;
+  tree_have = b;
+  tree_exists = c;
+
+  return tree, tree_have, tree_exists;
+}
+
+inline fn __fl_buildTree2(
+	#[secret] stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+	#[public] stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] seeds_have,
+	#[public] stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] seeds_exists,
+	#[secret] stack u8[TREE_NODES_1_SIZE] iSeedsTree,
+	#[secret] 		  stack u8[PNC_SALT_SIZE] salt, 
+	#[public] 		  reg u64 round
+) -> stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE], stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2], stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2]
+{
+	reg u64 in_idx out_idx;
+	stack u64 s_round;
+
+	s_round = round;
+
+	out_idx = round;
+	out_idx *= TREE_NODES_2_SIZE;
+	in_idx = round;
+	in_idx += GET_LEAVES_1;
+	in_idx *= PNC_INPUT_SIZE;
+	seeds = __fl_copy_input_seed2(seeds, iSeedsTree, out_idx, in_idx);
+
+	out_idx = s_round;
+	seeds, seeds_have, seeds_exists = __expandSeeds_22(seeds, seeds_have, seeds_exists, salt, out_idx);
+
+	return seeds, seeds_have, seeds_exists;
+}
+
+#[returnaddress="stack"]
+fn _picnic3_aux_sbox_bitsliced2(
+  #[secret] reg ptr u8[MZD_SIZE] statein stateout,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[public] reg u64 tapes_pos tapes_aux_pos
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+   reg u64 count;
+
+  stack u8[MZD_SIZE] s_statein s_stateout;
+  stack u8[MZD_SIZE] tmp;
+  stack u8[MZD_SIZE] a b c;
+  stack u8[MZD_SIZE] d e f;
+  stack u8[MZD_SIZE] fresh_output_ab fresh_output_bc fresh_output_ca;
+  stack u8[MZD_SIZE] t0 t1 t2 aux;
+
+  reg ptr u8[MZD_SIZE] reg_t;
+
+  stack u64 s_tapes_aux_pos;
+
+  s_tapes_aux_pos = tapes_aux_pos;
+  s_statein = __fl_reg_to_stack_uint64_192(statein, s_statein);
+  s_stateout = __fl_reg_to_stack_uint64_192(stateout, s_stateout);
+
+  tmp = __fl_mzd_copy_uint64_192(tmp, s_statein);
+  a = __fl_mzd_and_uint64_block(a, bitmask_a, tmp);
+  b = __fl_mzd_and_uint64_block(b, bitmask_b, tmp);
+  c = __fl_mzd_and_uint64_block(c, bitmask_c, tmp);
+
+
+  tmp = __fl_mzd_copy_uint64_192(tmp, a);
+  a  = __fl_mzd_shift2_left_uint64_192(a, tmp);
+
+  tmp = __fl_mzd_copy_uint64_192(tmp, b);
+  b  = __fl_mzd_shift1_left_uint64_192(b, tmp);
+
+  
+  tmp = __fl_mzd_copy_uint64_192(tmp, s_stateout);
+  d = __fl_mzd_and_uint64_block(d, bitmask_a, tmp);
+  e = __fl_mzd_and_uint64_block(e, bitmask_b, tmp);
+  f = __fl_mzd_and_uint64_block(f, bitmask_c, tmp);
+
+
+  tmp = __fl_mzd_copy_uint64_192(tmp, d);
+  d  = __fl_mzd_shift2_left_uint64_192(d, tmp);
+
+  tmp = __fl_mzd_copy_uint64_192(tmp, e);
+  e  = __fl_mzd_shift1_left_uint64_192(e, tmp);
+
+
+  fresh_output_ab = __fl_mzd_xor_uint64_block(fresh_output_ab, a, b);
+
+  fresh_output_ca = __fl_mzd_xor_uint64_block(fresh_output_ca, e, fresh_output_ab);
+  fresh_output_bc = __fl_mzd_xor_uint64_block(fresh_output_bc, d, a);
+  tmp = __fl_mzd_copy_uint64_192(tmp, fresh_output_ab); 
+  fresh_output_ab = __fl_mzd_xor_uint64_block(fresh_output_ab, tmp, c);
+  tmp = __fl_mzd_copy_uint64_192(tmp, fresh_output_ab);
+  fresh_output_ab = __fl_mzd_xor_uint64_block(fresh_output_ab, tmp, f);
+  
+
+  t2 = __fl_mzd_shift2_right_uint64_192(t2, fresh_output_ca);
+  t1 = __fl_mzd_shift1_right_uint64_192(t1, fresh_output_bc);
+
+  tmp = __fl_mzd_copy_uint64_192(tmp, t2);
+  t2 = __fl_mzd_xor_uint64_block( t2, tmp, t1);
+  aux = __fl_mzd_xor_uint64_block( aux, t2, fresh_output_ab);
+
+
+  /* a & b */
+    t0 = __fl_mzd_and_uint64_block(t0, a, b);
+    /* b & c */
+    t1  = __fl_mzd_and_uint64_block(t1, b, c);
+    /* c & a */
+    t2 = __fl_mzd_and_uint64_block(t2, c, a);
+
+
+    tmp = __fl_mzd_copy_uint64_192(tmp, t2);
+    t2 = __fl_mzd_shift2_right_uint64_192(t2, tmp);
+    tmp = __fl_mzd_copy_uint64_192(tmp, t1);
+    t1 = __fl_mzd_shift1_right_uint64_192(t1, tmp);
+
+    tmp = __fl_mzd_copy_uint64_192(tmp, t2);
+    t2 = __fl_mzd_xor_uint64_block(t2, tmp, t1);
+    tmp = __fl_mzd_copy_uint64_192(tmp, t2);
+    t2 = __fl_mzd_xor_uint64_block(t2, tmp, t0);
+    tmp = __fl_mzd_copy_uint64_192(tmp, aux);
+    aux = __fl_mzd_xor_uint64_block(aux, tmp, t2);
+
+
+    // Get bytes from: parity_tapes & last_party_tape
+    reg_t = t0;
+    count = tapes_pos;
+    count += TAPE_PARITY_TAPE_IDX;
+    reg_t = _mzd_from_bitstream_tapes2(tapes, reg_t, count);
+    t0 = reg_t;
+
+    tmp = __fl_mzd_copy_uint64_192(tmp, aux);
+    aux = __fl_mzd_xor_uint64_block(aux, tmp, t0);
+
+    reg_t = t1;
+    count = tapes_pos;
+    count += 15 * TAPE_SIZE_BYTES;
+    reg_t = _mzd_from_bitstream_tapes2(tapes, reg_t, count);
+    t1 = reg_t;
+
+    tmp = __fl_mzd_copy_uint64_192(tmp, aux);
+    aux = __fl_mzd_xor_uint64_block(aux, tmp, t1);
+
+    //Set bytes on: last_party_tape & aux_tape
+
+    reg_t = aux;
+    count = tapes_pos;
+    count += 15 * TAPE_SIZE_BYTES;
+    tapes = __mzd_to_bitstream_tapes2(tapes, reg_t, count);
+
+    reg_t = aux;
+    count = s_tapes_aux_pos;
+    count += TAPE_AUX_IDX;
+    tapes = __mzd_to_bitstream_tapes2(tapes, reg_t, count);
+
+    return tapes;
+}
+
+inline fn __picnic3_aux_sbox_bitsliced2(
+  stack u8[MZD_SIZE] statein stateout,
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  reg   u64 tapes_pos tapes_aux_pos
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg ptr u8[MZD_SIZE] a b;
+
+  a = statein;
+  b = stateout;
+  tapes = _picnic3_aux_sbox_bitsliced2(a,b,tapes,tapes_pos, tapes_aux_pos);
+
+  return tapes;
+}
+
+#[returnaddress="stack"]
+fn __lowmc_aux_impl_verify2(
+  #[secret] reg ptr u8[MZD_SIZE] lowmc_key,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[public]           reg u64 tapes_base
+) -> reg ptr u8[MZD_SIZE], reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  
+  inline int r;
+
+  stack u8[MZD_SIZE] x y key0;
+
+  reg u64 pos tapes_pos tapes_aux_pos;
+  reg u256 t;
+
+  stack u64 s_tapes_base;
+
+  stack ptr u8[MZD_SIZE] s_lowmc_key;
+  stack ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] s_tapes;
+
+  reg ptr u8[MZD_SIZE] reg_mzd;
+  reg ptr u64[MATRIX_ROUND] c;
+
+
+  s_tapes_base = tapes_base;
+  s_lowmc_key = lowmc_key;
+  s_tapes = tapes;
+
+  t = #set0_256();
+  x[u256 0] = t;
+
+  reg_mzd = key0;
+  lowmc_key = s_lowmc_key;
+  reg_mzd = _fl_mzd_copy_uint64_192(reg_mzd, lowmc_key);
+  lowmc_key = s_lowmc_key;
+  key0 = reg_mzd;
+
+  lowmc_key[u256 0] = t;
+
+  c = ki_matrix;
+  lowmc_key = lowmc_key;
+  lowmc_key = _fl_mzd_addmul_v_uint64_192(lowmc_key, reg_mzd, c);
+  s_lowmc_key = lowmc_key;
+
+  for r=0 to LOWMC_R
+  {
+      reg_mzd = x;
+      lowmc_key = s_lowmc_key;
+      c = k_matrix[(LOWMC_R - r) * MATRIX_ROUND : MATRIX_ROUND];
+      reg_mzd = _fl_mzd_addmul_v_uint64_192(reg_mzd, lowmc_key, c);
+      x = reg_mzd;
+
+      y = __fl_mzd_mul_v_uint64_192( y, x, li_matrix[(3-r) * MATRIX_ROUND : MATRIX_ROUND]);
+
+      // recover input masks from tapes, only in first round we use the key as input
+      if(r == (LOWMC_R - 1))
+      {
+        x = __fl_mzd_copy_uint64_192(x, key0);
+
+      } else {
+        pos = s_tapes_base;
+        pos += LOWMC_U8_N * 2 * (LOWMC_R - 1 - r) + TAPE_PARITY_TAPE_IDX;
+        tapes = s_tapes;
+        t = #set0_256();
+        x[u256 0] = t;
+        x = __mzd_from_bitstream_full_tapes(tapes, x, pos);
+      }
+
+      tapes_pos = s_tapes_base;
+      tapes_aux_pos = tapes_pos;
+      tapes_pos += LOWMC_U8_N * 2 * (LOWMC_R - 1 - r) + LOWMC_U8_N;
+      tapes_aux_pos += LOWMC_U8_N * (LOWMC_R - 1 - r);
+
+      tapes = s_tapes;
+      tapes = __picnic3_aux_sbox_bitsliced2(x, y, tapes, tapes_pos, tapes_aux_pos);
+      s_tapes = tapes;
+  }
+
+  lowmc_key = s_lowmc_key;
+  return lowmc_key, tapes;
+}
+
+#[returnaddress="stack"]
+fn __computeAuxTape2_aux(
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[secret] reg ptr u8[MZD_SIZE] lowmc_key,
+  #[public] reg u64 pos
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE], reg ptr u8[MZD_SIZE]
+{
+
+  reg u64 c1 c2 c3;
+  reg u64 t;
+
+  stack u64 s_pos;
+
+  s_pos = pos;
+
+  // combine into key shares and calculate lowmc evaluation in plain
+  
+  c2 = 0;
+  while( c2 < TAPE_SIZE_BYTES)
+  {
+    t = tapes.[u64 pos];
+    tapes.[u64 TAPE_PARITY_TAPE_IDX + pos] = t;
+
+    pos += 8;
+    c2 += 8;
+  }
+
+  c1 = 1;
+  while( c1 < PNC_N_MPC_PARTIES )
+  {
+    c3 = s_pos;
+    c2 = 0;
+    while( c2 < TAPE_SIZE_BYTES )
+    {
+      t = tapes.[u64 pos];
+      tapes.[u64 TAPE_PARITY_TAPE_IDX + c3] ^= t;
+      
+      pos += 8;
+      c3 += 8;
+      c2 += 8;
+    }
+
+    c1 += 1;
+  }
+
+  c1 = 0;
+  while( c1 < TAPE_AUX_SIZE )
+  {
+    tapes.[u64 pos] = 0;
+
+    pos += 8;
+    c1 += 8;
+  }
+  
+  pos += TAPE_BUFFER_SIZE;
+  c1 = MZD_SIZE - 16;
+  while(c1 > 0)
+  {
+    c2 = tapes.[u64 pos];
+    c2 = #BSWAP_64(c2);
+    lowmc_key.[u64 c1] = c2;
+
+    pos += 8;
+    c1 -= 8;
+  }
+  c2 = tapes.[u64 pos];
+  c2 = #BSWAP_64(c2);
+  lowmc_key.[u64 c1] = c2;
+
+  // Perform LowMC evaluation and fix AND masks for all AND gates
+  pos = s_pos;/* passing tapes bytes idx */
+  lowmc_key, tapes = __lowmc_aux_impl_verify2(lowmc_key, tapes, pos);
+
+  return tapes, lowmc_key;
+}
+
+#[returnaddress="stack"]
+fn _createRandomTapes2(
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  #[secret] reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 t
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg u16 t16;
+  reg u64 t64 base_tapes;
+  stack u64 s_t;
+  inline int z;
+
+  s_t = t;
+  () = #spill(seeds, salt);
+
+  // Generates tapes for 4 players at a time; For 16 players we need 4 rounds
+  for z=0 to 4
+  {
+    t = s_t;
+    t16 = z * 4;
+    base_tapes = t;
+    base_tapes *= TAPES_FULL_SIZE;
+    base_tapes += z * 4 * TAPE_SIZE_BYTES;
+    t64 = t;
+    t64 *= TREE_NODES_2_SIZE;
+    t64 += GET_LEAVES_2 * PNC_SEED_SIZE + z * 4 * PNC_SEED_SIZE;
+
+    () = #unspill(seeds, salt);
+   tapes = __hashTapes2_x4(tapes, seeds, salt, t, t16, t64, base_tapes);
+  }
+
+  return tapes;
+}
+
+inline fn __createRandomTapes2(
+  #[secret] stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[secret] stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  #[secret] stack u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 t
+) -> stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] a;
+  reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] b;
+  reg ptr u8[PNC_SALT_SIZE] c;
+
+  a = tapes;
+  b = seeds;
+  c = salt;
+  a = _createRandomTapes2(a,b,c,t);
+  tapes = a;
+
+  return tapes;
+}
+
+#[returnaddress="stack"]
+fn _computeAuxTape2(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+	#[secret] reg ptr u8[PNC_N_ROUNDS * MZD_SIZE] input_masks,
+	#[secret] reg ptr u8[MZD_SIZE] privKey,
+	#[public] reg u64 pos
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE], reg ptr u8[PNC_N_ROUNDS * MZD_SIZE]
+{
+	stack u8[MZD_SIZE] lowmc_key;
+
+	stack u64 s_pos;
+	stack ptr u8[PNC_N_ROUNDS * MZD_SIZE] s_input_masks;
+	stack ptr u8[MZD_SIZE] s_privKey;
+
+	reg ptr u8[MZD_SIZE] reg_lowmc_key;
+
+	s_pos = pos;
+	pos *= TAPES_FULL_SIZE;
+	s_privKey = privKey;
+	reg_lowmc_key = lowmc_key;
+	s_input_masks = input_masks;
+	
+	tapes, reg_lowmc_key = __computeAuxTape2_aux(tapes, reg_lowmc_key, pos);
+
+	input_masks = s_input_masks;
+	privKey = s_privKey;
+	pos = s_pos;
+	pos *= MZD_SIZE;
+
+	// write the key masks XORed with the key to the input
+	input_masks = __fl_masked_mzd_to_char_array(input_masks, reg_lowmc_key, privKey, pos);
+
+
+  	return tapes, input_masks;
+}
+
+inline fn __computeAuxTape2(
+	#[secret] stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+	#[secret] stack u8[PNC_N_ROUNDS * MZD_SIZE] input_masks,
+	#[secret] stack u8[MZD_SIZE] privKey,
+	#[public] reg u64 pos
+) -> stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE], stack u8[PNC_N_ROUNDS * MZD_SIZE]
+{
+	reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] a;
+	reg ptr u8[PNC_N_ROUNDS * MZD_SIZE] b;	
+	reg ptr u8[MZD_SIZE] c;
+
+	a = tapes;
+	b = input_masks;
+	c = privKey;
+	a,b = _computeAuxTape2(a,b,c,pos);
+	tapes = a;
+	input_masks = b;
+
+	return tapes, input_masks;
+}
+
+inline 
+fn _picnic3_mpc_sbox_bitsliced2(
+  stack u8[MZD_SIZE] statein,
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+  reg u64 pos_msgs pos_tapes,
+  reg u64 unopened
+) -> stack u8[MZD_SIZE], reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+  stack u8[MZD_SIZE] tmp;
+  stack u8[MZD_SIZE] a b c;
+  stack u8[MZD_SIZE] s_ab s_bc s_ca;
+  stack u8[MZD_SIZE] mask_a mask_b mask_c;
+  stack u8[MZD_SIZE] and_helper_ab and_helper_bc and_helper_ca;
+
+  reg u64 pos i;
+  stack u64 s_pos_msgs s_pos_tapes s_i s_unopened;
+
+  #[mmy] reg u256 ymm0 ymm1 ymm2 ymm3 ymm4 ymm5 ymm6 ymm7 ymm8 ymm9 ymm10;
+
+  s_unopened = unopened;
+  s_pos_msgs = pos_msgs;
+  s_pos_tapes = pos_tapes;
+
+  ymm0 = statein[u256 0];
+  ymm1 = ymm0 & bitmask_a[u256 0];
+  ymm2 = ymm0 & bitmask_b[u256 0];
+  ymm3 = ymm0 & bitmask_c[u256 0];
+
+  ymm0 = #VPSRL_4u64(ymm1,62);
+  ymm1 = #VPSLL_4u64(ymm1,2);
+  ymm0 = #VPERMQ(ymm0, 147);
+  c[u256 0] = ymm3;
+  ymm4 = ymm1 | ymm0;
+
+  ymm5 = #VPSRL_4u64(ymm2,63);
+  ymm5 = #VPERMQ(ymm5, 147);
+  ymm2 = #VPSLL_4u64(ymm2,1);
+  a[u256 0] = ymm4;
+  ymm6 = ymm2 | ymm5;
+
+  ymm0 = ymm3 & ymm6;
+  ymm3 &= ymm4;
+  b[u256 0] = ymm6;
+  s_ca[u256 0] = ymm3;
+  ymm3 = ymm4 & ymm6;
+  s_bc[u256 0] = ymm0;
+  s_ab[u256 0] = ymm3;
+
+  i = 0;
+  while(i < 16)
+  {
+    s_i = i;
+    unopened = s_unopened;
+    if(unopened == i) 
+    { 
+
+      /* we are in verify, just grab the broadcast s from the msgs array */
+      pos = s_unopened;
+      pos *= PNC_VIEW_SIZE;
+      pos += s_pos_msgs;
+      tmp =  __mzd_from_bitstream2_full_msgs(msgs, tmp, pos);
+
+      ymm0 = tmp[u256 0];
+      ymm1 = ymm0 & bitmask_a[u256 0];
+      ymm2 = ymm0 & bitmask_b[u256 0];
+      ymm3 = ymm0 & bitmask_c[u256 0];
+
+      ymm4 = #VPSRL_4u64(ymm1,62);
+      ymm0 = #VPSLL_4u64(ymm1,2);
+      ymm3 ^= s_ab[u256 0];
+      ymm1 =  #VPSRL_4u64(ymm2,63);
+      ymm2 = #VPSLL_4u64(ymm2,1);
+
+      ymm4 = #VPERMQ(ymm4, 147);
+      ymm1 = #VPERMQ(ymm1, 147);
+
+      ymm4 |= ymm0;
+      s_ab[u256 0] = ymm3;
+      ymm0 = ymm4 ^ s_ca[u256 0];
+      ymm1 |= ymm2;
+      ymm5 = ymm1 ^ s_bc[u256 0];
+      s_ca[u256 0] = ymm0;
+      s_bc[u256 0] = ymm5;
+    }
+    else {
+      /* make a mzd_local from tape[i] for input_masks */
+      pos = s_i;
+      pos *= TAPE_SIZE_BYTES;
+      pos += s_pos_tapes;
+      tmp = __mzd_from_bitstream_verify(tapes, tmp, pos);
+      
+      ymm0 = tmp[u256 0];
+      ymm2 = ymm0 & bitmask_a[u256 0];
+      ymm4 = ymm0 & bitmask_b[u256 0];
+      ymm0 = ymm0 & bitmask_c[u256 0];
+  
+      ymm1 = #VPSRL_4u64(ymm2,62);
+      ymm2 = #VPSLL_4u64(ymm2,2);
+      mask_c[u256 0] = ymm0;
+
+      ymm1 = #VPERMQ(ymm1, 147);
+      ymm2 |= ymm1;
+
+      ymm1 = #VPSRL_4u64(ymm4,63);
+      ymm1 = #VPERMQ(ymm1, 147);
+      ymm4 = #VPSLL_4u64(ymm4,1);
+      mask_a[u256 0] = ymm2;
+      ymm4 |= ymm1;
+      mask_b[u256 0] = ymm4;  
+
+
+      /* make a mzd_local from tape[i] for and_helper; */
+
+      pos = s_i;
+      pos *= TAPE_SIZE_BYTES;
+      pos += s_pos_tapes;
+      pos += (LOWMC_N_BITS >> 3);
+      tmp = __mzd_from_bitstream_verify(tapes, tmp, pos);
+
+      ymm10 = b[u256 0];
+      ymm0 = a[u256 0];
+      ymm7 = tmp[u256 0];
+      ymm2 = mask_b[u256 0];
+      ymm1 = ymm7 & bitmask_b[u256 0];
+      ymm4 = mask_a[u256 0];
+      ymm5 = ymm7 & bitmask_a[u256 0];
+      ymm7 &= bitmask_c[u256 0];
+
+      and_helper_ab[u256 0] = ymm7;
+
+      /* s_ab */
+
+      ymm3 = ymm0 & ymm2;
+      ymm9 = #VPSRL_4u64(ymm1,63);
+      ymm6 = #VPSLL_4u64(ymm1,1);
+      ymm1 = ymm10 & ymm4;
+
+      ymm8 = #VPSRL_4u64(ymm5,62);
+      ymm9 = #VPERMQ(ymm9, 147);
+      ymm3 ^= ymm1;
+
+      ymm6 |= ymm9;
+      ymm8 = #VPERMQ(ymm8, 147);
+      ymm3 ^= ymm7;
+      tmp[u256 0] = ymm3;
+
+      ymm5 = #VPSLL_4u64(ymm5,2);
+      ymm7 = ymm3 ^ s_ab[u256 0];
+      
+      ymm5 |= ymm8;
+      and_helper_bc[u256 0] = ymm6;
+      and_helper_ca[u256 0] = ymm5;
+
+      s_ab[u256 0] = ymm7;
+
+      /* s_bc & s_ca */
+
+      ymm7 = ymm0;            // ymm7 = a
+      ymm0 = mask_c[u256 0];  // ymm0 = mask_c
+      ymm1 = ymm7 & ymm0;     // ymm1 = t1(ca) = a & mask_c
+      ymm0 &= ymm10;          // ymm0 = t0(bc) = mask_c & b
+      ymm1 ^= ymm5;           // ymmm1 ^= and_helper_ca
+      ymm5 = c[u256 0];       // ymm5 = c;
+      ymm0 ^= ymm6;           // ymm0 = t0 ^ and_helper_bc
+      ymm4 &= ymm5;           // ymm4 = t0(ca) = mask_a & c;
+      ymm2 &= ymm5;           // ymm2 = mask_b & c
+      ymm1 ^= ymm4;           // ymm1 = t1(ca) ^ t0(ca);
+      ymm0 ^= ymm2;           // ymm0 = t0 ^ t1       
+      ymm7 = ymm1 ^ s_ca[u256 0]; // ymm7 = (t0(ca) ^ t1(ca)) ^ s_ca
+
+      ymm4 = #VPSLL_4u64(ymm1,62);
+      ymm2 = #VPSLL_4u64(ymm0,63);
+      ymm6 = ymm0 ^ s_bc[u256 0];
+      ymm4 = #VPERMQ(ymm4, 57);
+      ymm1 = #VPSRL_4u64(ymm1,2);
+      ymm2 = #VPERMQ(ymm2, 57);
+      s_bc[u256 0] = ymm6;            
+      ymm0 = #VPSRL_4u64(ymm0,1);
+      ymm1 |= ymm4;             // ymm1 = (t0(ca) << 62) | (t0(ca) >> 2)
+      s_ca[u256 0] = ymm7;    
+      ymm0 |= ymm2;             // ymm1 = (t0(ca) << 63) | (t0(ca) >> 1)
+      ymm0 ^= tmp[u256 0];
+      ymm0 ^= ymm1;
+      tmp[u256 0] = ymm0;
+
+
+      pos = s_i;
+      pos *= PNC_VIEW_SIZE;
+      pos += s_pos_msgs;
+      msgs = __mzd_to_bitstream2_full_msgs(msgs, tmp, pos);
+    }
+
+    i = s_i;
+    i += 1;
+  }
+
+  ymm3 = a[u256 0];
+  ymm2 = ymm3 ^ b[u256 0];
+  ymm1 = ymm3 ^ s_bc[u256 0];
+  ymm0 = ymm2 ^ s_ca[u256 0];
+  ymm3 = #VPSLL_4u64(ymm1,62);
+  ymm1 = #VPSRL_4u64(ymm1,2);
+  ymm4 = #VPSLL_4u64(ymm0,63);
+  ymm0 = #VPSRL_4u64(ymm0,1);
+
+  ymm3 = #VPERMQ(ymm3, 57);
+  ymm4 = #VPERMQ(ymm4, 57);
+  ymm1 |= ymm3;
+  ymm0 |= ymm4;
+  ymm0 ^= ymm1;
+  ymm3 = ymm2 ^ c[u256 0];
+  ymm0 ^= ymm3;
+  ymm0 ^= s_ab[u256 0];
+  statein[u256 0] = ymm0;
+
+  return statein, msgs;
+}
+
+inline fn __picnic3_mpc_sbox_bitsliced2(
+  stack u8[MZD_SIZE] statein,
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+  reg u64 pos_msgs pos_tapes,
+  reg u64 unopened
+) -> stack u8[MZD_SIZE], reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+  reg ptr u8[MZD_SIZE] a;
+
+  a = statein;
+  a, msgs = _picnic3_mpc_sbox_bitsliced2(a, tapes, msgs, pos_msgs, pos_tapes, unopened); 
+  statein = a;
+
+  return statein, msgs;
+}
+
+#[returnaddress="stack"]
+fn _simulateOnline2(
+  reg ptr u8[MZD_SIZE] _maskedKey,
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+  reg ptr u8[MZD_SIZE] _plaintext,
+  reg u64 msgs_offset tapes_offset unopened
+) -> reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+
+  reg u64 pos_msgs pos_tapes;
+  stack u64 s_msgs_offset s_tapes_offset s_unopened;
+
+  stack u8[MZD_SIZE] temp state s_maskedKey s_plaintext;
+  
+  stack ptr u8[MZD_SIZE] tmp;
+
+  reg ptr u8[MZD_SIZE] maskedKey;
+
+  inline int r;
+
+  /* Set offset from bytes to bits */
+  s_tapes_offset = tapes_offset;
+  s_msgs_offset = msgs_offset;
+  s_unopened = unopened;
+
+  s_maskedKey = __fl_reg_to_stack_uint64_192(_maskedKey,s_maskedKey);
+  s_plaintext = __fl_reg_to_stack_uint64_192(_plaintext,s_plaintext);
+
+  temp = __fl_mzd_mul_v_uint64_192(temp, s_maskedKey, k_matrix[0:MATRIX_ROUND]);
+  state = __fl_mzd_xor_uint64_block(state, temp, s_plaintext);
+
+
+  for r=0 to LOWMC_R
+  {
+    pos_msgs = s_msgs_offset;
+    pos_msgs += LOWMC_U8_N * r;
+    pos_tapes = s_tapes_offset;
+    pos_tapes += LOWMC_U8_N * 2 * r;
+
+    tmp = maskedKey;
+    unopened = s_unopened;
+    state, msgs = __picnic3_mpc_sbox_bitsliced2(state, tapes, msgs, pos_msgs, pos_tapes, unopened);
+
+    temp = __fl_mzd_mul_v_uint64_192(temp, state, l_matrix[MATRIX_ROUND * r : MATRIX_ROUND]);
+
+    state = __fl_mzd_xor_uint64_block(state, temp, r_c[MZD_SIZE * r : MZD_SIZE]);
+
+    maskedKey = s_maskedKey;
+    state = __fl_mzd_addmul_v_uint64_192(state, maskedKey, k_matrix[MATRIX_ROUND * (r + 1) : MATRIX_ROUND]);
+  }  
+
+  return msgs;
+}
+
+inline fn __simulateOnline2(
+  stack u8[MZD_SIZE] maskedKey,
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+  stack u8[MZD_SIZE] plaintext,
+  reg u64 msgs_offset tapes_offset unopened
+) -> stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+  reg ptr u8[MZD_SIZE] a;
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] b;
+  reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] c;
+  reg ptr u8[MZD_SIZE] d;
+
+  a = maskedKey;
+  b = tapes;
+  c = msgs;
+  d = plaintext;
+  msgs_offset = msgs_offset;
+  tapes_offset = tapes_offset;
+  unopened = unopened;
+  c = _simulateOnline2(a, b, c, d, msgs_offset, tapes_offset, unopened);
+  msgs = c;
+
+  return msgs;
+}

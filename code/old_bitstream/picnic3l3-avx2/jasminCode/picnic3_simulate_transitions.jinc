@@ -1,0 +1,77 @@
+require "picnic3_simulate.jinc"
+require "noslice_copy.jinc"
+
+
+inline fn __simulateOnline(
+  stack u8[MZD_SIZE] maskedKey,
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+  stack u8[MZD_SIZE] plaintext,
+  reg u64 round unopened
+) -> stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+  reg u64 tapes_idx msgs_idx;
+
+  reg ptr u8[MZD_SIZE] a;
+  reg ptr u8[TAPES_FULL_SIZE] b;
+  reg ptr u8[MSGS_FULL_SIZE] c;
+  reg ptr u8[MZD_SIZE] d;
+
+  stack u8[TAPES_FULL_SIZE] tmp_tapes;
+  stack u8[MSGS_FULL_SIZE] tmp_msgs;
+  stack u64 s_round s_unopened;
+
+  s_round = round;
+  s_unopened = unopened;
+  tapes_idx = round;
+  tapes_idx *= TAPES_FULL_SIZE;
+  tmp_tapes = __ns_get_tapes(tapes, tmp_tapes, tapes_idx);   /* tapes are only read */
+  msgs_idx = s_round;
+  msgs_idx *= MSGS_FULL_SIZE;
+  tmp_msgs = __ns_get_msgs(msgs, tmp_msgs, msgs_idx);
+
+  a = maskedKey;
+  b = tmp_tapes;
+  c = tmp_msgs;
+  d = plaintext;
+  unopened = s_unopened;
+
+  c = _simulateOnline(a, b, c, d, unopened);
+  tmp_msgs = c;
+
+  msgs_idx = s_round;
+  msgs_idx *= MSGS_FULL_SIZE;
+  msgs = __ns_put_msgs(msgs, tmp_msgs, msgs_idx);
+
+  return msgs;
+}
+
+inline fn __simulateOnline_verify(
+  stack u8[MZD_SIZE] maskedKey,
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  stack u8[MSGS_FULL_SIZE] msgs,
+  stack u8[MZD_SIZE] plaintext,
+  reg u64 round unopened
+) -> stack u8[MSGS_FULL_SIZE]
+{
+  reg ptr u8[MZD_SIZE] a;
+  reg ptr u8[TAPES_FULL_SIZE] b;
+  reg ptr u8[MSGS_FULL_SIZE] c;
+  reg ptr u8[MZD_SIZE] d;
+
+  stack u8[TAPES_FULL_SIZE] tmp_tapes;
+
+  round *= TAPES_FULL_SIZE;
+  tmp_tapes = __ns_get_tapes(tapes, tmp_tapes, round);   /* tapes are only read */
+
+  a = maskedKey;
+  b = tmp_tapes;
+  c = msgs;
+  d = plaintext;
+  unopened = unopened;
+
+  c = _simulateOnline(a, b, c, d, unopened);
+  msgs = c;
+
+  return msgs;
+}

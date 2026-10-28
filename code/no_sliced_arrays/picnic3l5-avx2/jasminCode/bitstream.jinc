@@ -1,0 +1,1262 @@
+require "params.jinc"
+
+
+fn _bitstream_get_bits(
+	#[secret] reg ptr u8[TAPES_FULL_SIZE] bs,
+	#[public] reg u64 position num_bits
+) -> reg u64
+{
+	reg u8 p;
+	reg u64 ret skip_bits start_bits aux ret1 tmp;
+
+	aux = position;
+	aux >>= 3;
+	p = bs[aux];
+	ret = (64u)p;
+
+	skip_bits = position;
+	skip_bits &= 7;
+
+	start_bits = 8;
+	start_bits -= skip_bits;
+
+	aux = 1;
+	tmp = start_bits;
+	_, _, _, _, _, aux = #SHL(aux, tmp);
+	aux -= 1;
+	ret &= aux;
+
+	if(start_bits < num_bits){ /* start_bits < num_bits */
+
+	  num_bits -= start_bits;
+	  aux = position;
+	  aux >>= 3;
+	  aux += 1;
+
+	  while(num_bits >= 8) /* num_bits >= 8 */
+	  {
+	  	p = bs[aux];
+	  	ret1 = (64u) p;
+	  	ret <<= 8;
+	  	ret |= ret1;
+	    
+	  	num_bits -= 8;
+	  	aux += 1;	
+	  }
+
+	  if (num_bits > 0) { /* num_bits > 0 */
+	  	tmp = num_bits;
+	  	_, _, _, _, _, ret = #SHL(ret, tmp);
+
+	  	p = bs[aux];
+	  	ret1 = (64u) p;
+	  	tmp = 8;
+	  	tmp -= num_bits;
+	  	_, _, _, _, _, ret1 = #SHR(ret1, tmp); 
+	  	aux = 1;
+	  	tmp = num_bits;
+	  	_, _, _, _, _, aux = #SHL(aux, tmp);
+	  	aux -= 1;
+	  	ret1 &= aux;
+
+	  	ret |= ret1;
+
+	  }
+
+	}
+	else{
+		tmp = start_bits;
+		tmp -= num_bits; 
+		_, _, _, _, _, ret = #SHR(ret, tmp);
+	}
+
+  return ret;
+}
+
+fn _mzd_from_bitstream_tapes(
+	#[secret] reg ptr u8[TAPES_FULL_SIZE] bs,
+	#[secret] reg ptr u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 bits out_pos t num_bits;
+
+	bits = LOWMC_N_BITS;
+	out_pos = (MZD_U64_SIZE - 1);
+
+	while(bits >= 64)
+	{
+		num_bits = 64;
+		t = _bitstream_get_bits(bs, pos, num_bits);
+		v[u64 out_pos] = t;
+
+		out_pos -= 1;
+		bits -= 64;
+		pos += 64;
+	}
+
+	if(bits > 0)
+	{
+		num_bits = bits;
+		t = _bitstream_get_bits(bs, pos, num_bits);
+		num_bits = 64;
+		num_bits -= bits;
+		_, _, _, _, _, t = #SHL(t,num_bits);
+		v[u64 out_pos] = t;
+
+		out_pos -= 1;
+	}
+
+	return v;
+}
+
+inline fn __mzd_from_bitstream_tapes(
+	#[secret] reg ptr u8[TAPES_FULL_SIZE] bs,
+	#[secret] stack u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	a = _mzd_from_bitstream_tapes(bs,a,pos);
+	v = a;
+
+	return v;
+}
+
+fn _bitstream_get_bits_tapes(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[public] reg u64 position num_bits
+) -> reg u64
+{
+	reg u8 p;
+	reg u64 ret skip_bits start_bits aux ret1 tmp;
+
+	aux = position;
+	aux >>= 3;
+	p = bs[aux];
+	ret = (64u)p;
+
+	skip_bits = position;
+	skip_bits &= 7;
+
+	start_bits = 8;
+	start_bits -= skip_bits;
+
+	aux = 1;
+	tmp = start_bits;
+	_, _, _, _, _, aux = #SHL(aux, tmp);
+	aux -= 1;
+	ret &= aux;
+
+	if(start_bits < num_bits){ /* start_bits < num_bits */
+
+	  num_bits -= start_bits;
+	  aux = position;
+	  aux >>= 3;
+	  aux += 1;
+
+	  while(num_bits >= 8) /* num_bits >= 8 */
+	  {
+	  	p = bs[aux];
+	  	ret1 = (64u) p;
+	  	ret <<= 8;
+	  	ret |= ret1;
+	    
+	  	num_bits -= 8;
+	  	aux += 1;	
+	  }
+
+	  if (num_bits > 0) { /* num_bits > 0 */
+	  	tmp = num_bits;
+	  	_, _, _, _, _, ret = #SHL(ret, tmp);
+
+	  	p = bs[aux];
+	  	ret1 = (64u) p;
+	  	tmp = 8;
+	  	tmp -= num_bits;
+	  	_, _, _, _, _, ret1 = #SHR(ret1, tmp); 
+	  	aux = 1;
+	  	tmp = num_bits;
+	  	_, _, _, _, _, aux = #SHL(aux, tmp);
+	  	aux -= 1;
+	  	ret1 &= aux;
+
+	  	ret |= ret1;
+
+	  }
+
+	}
+	else{
+		tmp = start_bits;
+		tmp -= num_bits; 
+		_, _, _, _, _, ret = #SHR(ret, tmp);
+	}
+
+  return ret;
+}
+
+fn _mzd_from_bitstream_tapes2(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[secret] reg ptr u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 bits out_pos t num_bits;
+
+	bits = LOWMC_N_BITS;
+	out_pos = (MZD_U64_SIZE - 1);
+
+	while(bits >= 64)
+	{
+		num_bits = 64;
+		t = _bitstream_get_bits_tapes(bs, pos, num_bits);
+		v[u64 out_pos] = t;
+
+		out_pos -= 1;
+		bits -= 64;
+		pos += 64;
+	}
+
+	if(bits > 0)
+	{
+		num_bits = bits;
+		t = _bitstream_get_bits_tapes(bs, pos, num_bits);
+		num_bits = 64;
+		num_bits -= bits;
+		_, _, _, _, _, t = #SHL(t,num_bits);
+		v[u64 out_pos] = t;
+
+		out_pos -= 1;
+	}
+
+	return v;
+}
+
+inline fn __mzd_from_bitstream_tapes2(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[secret] stack u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	a = _mzd_from_bitstream_tapes2(bs,a,pos);
+	v = a;
+
+	return v;
+}
+
+fn _bitstream_get_bits2(
+	#[secret] reg ptr u8[MSGS_FULL_SIZE] bs,
+	#[public] reg u64 position num_bits
+) ->  reg u64
+{
+	reg u8 p;
+	reg u64 ret skip_bits start_bits aux ret1 tmp;
+
+	aux = position;
+	aux >>= 3;
+	p = bs[aux];
+	ret = (64u)p;
+
+	skip_bits = position;
+	skip_bits &= 7;
+
+	start_bits = 8;
+	start_bits -= skip_bits;
+
+	aux = 1;
+	tmp = start_bits;
+	_, _, _, _, _, aux = #SHL(aux, tmp);
+	aux -= 1;
+	ret &= aux;
+
+	if(start_bits < num_bits){ /* start_bits < num_bits */
+
+	  num_bits -= start_bits;
+	  aux = position;
+	  aux >>= 3;
+	  aux += 1;
+
+	  while(num_bits >= 8) /* num_bits >= 8 */
+	  {
+	  	p = bs[aux];
+	  	ret1 = (64u) p;
+	  	ret <<= 8;
+	  	ret |= ret1;
+	    
+	  	num_bits -= 8;
+	  	aux += 1;	
+	  }
+
+	  if (num_bits > 0) { /* num_bits > 0 */
+	  	tmp = num_bits;
+	  	_, _, _, _, _, ret = #SHL(ret, tmp);
+
+	  	p = bs[aux];
+	  	ret1 = (64u) p;
+	  	tmp = 8;
+	  	tmp -= num_bits;
+	  	_, _, _, _, _, ret1 = #SHR(ret1, tmp); 
+	  	aux = 1;
+	  	tmp = num_bits;
+	  	_, _, _, _, _, aux = #SHL(aux, tmp);
+	  	aux -= 1;
+	  	ret1 &= aux;
+
+	  	ret |= ret1;
+
+	  }
+
+	}
+	else{
+		tmp = start_bits;
+		tmp -= num_bits; 
+		_, _, _, _, _, ret = #SHR(ret, tmp);
+	}
+
+  return ret;
+}
+
+
+fn _mzd_from_bitstream_msgs(
+	#[secret] reg ptr u8[MSGS_FULL_SIZE] bs,
+	#[secret] reg ptr u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 bits out_pos t num_bits;
+
+	bits = LOWMC_N_BITS;
+	out_pos = (MZD_U64_SIZE - 1);
+
+	while(bits >= 64)
+	{
+		num_bits = 64;
+		t = _bitstream_get_bits2(bs, pos, num_bits);
+		v[u64 out_pos] = t;
+
+		out_pos -= 1;
+		bits -= 64;
+		pos += 64;
+	}
+
+	if(bits > 0)
+	{
+		num_bits = bits;
+		t = _bitstream_get_bits2(bs, pos, num_bits);
+		num_bits = 64;
+		num_bits -= bits;
+		_, _, _, _, _, t = #SHL(t,num_bits);
+		v[u64 out_pos] = t;
+
+		out_pos -= 1;
+	}
+
+	return v;
+}
+
+inline fn __mzd_from_bitstream_msgs(
+	#[secret] reg ptr u8[MSGS_FULL_SIZE] bs,
+	#[secret] stack u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	a = _mzd_from_bitstream_msgs(bs, a, pos);
+	v = a;
+
+	return v;
+}
+
+fn _bitstream_get_bits_msgs(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] bs,
+	#[public] reg u64 position num_bits
+) ->  reg u64
+{
+	reg u8 p;
+	reg u64 ret skip_bits start_bits aux ret1 tmp;
+
+	aux = position;
+	aux >>= 3;
+	p = bs[aux];
+	ret = (64u)p;
+
+	skip_bits = position;
+	skip_bits &= 7;
+
+	start_bits = 8;
+	start_bits -= skip_bits;
+
+	aux = 1;
+	tmp = start_bits;
+	_, _, _, _, _, aux = #SHL(aux, tmp);
+	aux -= 1;
+	ret &= aux;
+
+	if(start_bits < num_bits){ /* start_bits < num_bits */
+
+	  num_bits -= start_bits;
+	  aux = position;
+	  aux >>= 3;
+	  aux += 1;
+
+	  while(num_bits >= 8) /* num_bits >= 8 */
+	  {
+	  	p = bs[aux];
+	  	ret1 = (64u) p;
+	  	ret <<= 8;
+	  	ret |= ret1;
+	    
+	  	num_bits -= 8;
+	  	aux += 1;	
+	  }
+
+	  if (num_bits > 0) { /* num_bits > 0 */
+	  	tmp = num_bits;
+	  	_, _, _, _, _, ret = #SHL(ret, tmp);
+
+	  	p = bs[aux];
+	  	ret1 = (64u) p;
+	  	tmp = 8;
+	  	tmp -= num_bits;
+	  	_, _, _, _, _, ret1 = #SHR(ret1, tmp); 
+	  	aux = 1;
+	  	tmp = num_bits;
+	  	_, _, _, _, _, aux = #SHL(aux, tmp);
+	  	aux -= 1;
+	  	ret1 &= aux;
+
+	  	ret |= ret1;
+
+	  }
+
+	}
+	else{
+		tmp = start_bits;
+		tmp -= num_bits; 
+		_, _, _, _, _, ret = #SHR(ret, tmp);
+	}
+
+  return ret;
+}
+
+fn _mzd_from_bitstream_msgs2(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] bs,
+	#[secret] reg ptr u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 bits out_pos t num_bits;
+
+	bits = LOWMC_N_BITS;
+	out_pos = (MZD_U64_SIZE - 1);
+
+	while(bits >= 64)
+	{
+		num_bits = 64;
+		t = _bitstream_get_bits_msgs(bs, pos, num_bits);
+		v[u64 out_pos] = t;
+
+		out_pos -= 1;
+		bits -= 64;
+		pos += 64;
+	}
+
+	if(bits > 0)
+	{
+		num_bits = bits;
+		t = _bitstream_get_bits_msgs(bs, pos, num_bits);
+		num_bits = 64;
+		num_bits -= bits;
+		_, _, _, _, _, t = #SHL(t,num_bits);
+		v[u64 out_pos] = t;
+
+		out_pos -= 1;
+	}
+
+	return v;
+}
+
+inline fn __mzd_from_bitstream_msgs2(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] bs,
+	#[secret] stack u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	a = _mzd_from_bitstream_msgs2(bs, a, pos);
+	v = a;
+
+	return v;
+}
+
+fn _bitstream_get_bits3(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[public] reg u64 position num_bits
+) -> reg u64
+{
+	reg u8 p;
+	reg u64 ret skip_bits start_bits aux ret1 tmp;
+
+	aux = position;
+	aux >>= 3;
+	p = bs[aux];
+	ret = (64u)p;
+
+	skip_bits = position;
+	skip_bits &= 7;
+
+	start_bits = 8;
+	start_bits -= skip_bits;
+
+	aux = 1;
+	tmp = start_bits;
+	_, _, _, _, _, aux = #SHL(aux, tmp);
+	aux -= 1;
+	ret &= aux;
+
+	if(start_bits < num_bits){ /* start_bits < num_bits */
+
+	  num_bits -= start_bits;
+	  aux = position;
+	  aux >>= 3;
+	  aux += 1;
+
+	  while(num_bits >= 8) /* num_bits >= 8 */
+	  {
+	  	p = bs[aux];
+	  	ret1 = (64u) p;
+	  	ret <<= 8;
+	  	ret |= ret1;
+	    
+	  	num_bits -= 8;
+	  	aux += 1;	
+	  }
+
+	  if (num_bits > 0) { /* num_bits > 0 */
+	  	tmp = num_bits;
+	  	_, _, _, _, _, ret = #SHL(ret, tmp);
+
+	  	p = bs[aux];
+	  	ret1 = (64u) p;
+	  	tmp = 8;
+	  	tmp -= num_bits;
+	  	_, _, _, _, _, ret1 = #SHR(ret1, tmp); 
+	  	aux = 1;
+	  	tmp = num_bits;
+	  	_, _, _, _, _, aux = #SHL(aux, tmp);
+	  	aux -= 1;
+	  	ret1 &= aux;
+
+	  	ret |= ret1;
+
+	  }
+
+	}
+	else{
+		tmp = start_bits;
+		tmp -= num_bits; 
+		_, _, _, _, _, ret = #SHR(ret, tmp);
+	}
+
+  return ret;
+}
+
+#[returnaddress="stack"]
+fn _mzd_from_bitstream_tapes_verify(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[secret] reg ptr u8[MZD_SIZE] v,
+	#[public] reg 	u64 pos
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 bits out_pos t num_bits;
+
+	bits = LOWMC_N_BITS;
+	out_pos = (MZD_U64_SIZE - 1);
+
+	while(bits >= 64)
+	{
+		num_bits = 64;
+		t = _bitstream_get_bits3(bs, pos, num_bits);
+		v[u64 out_pos] = t;
+
+		out_pos -= 1;
+		bits -= 64;
+		pos += 64;
+	}
+
+	if(bits > 0)
+	{
+		num_bits = bits;
+		t = _bitstream_get_bits3(bs, pos, num_bits);
+		num_bits = 64;
+		num_bits -= bits;
+		_, _, _, _, _, t = #SHL(t,num_bits);
+		v[u64 out_pos] = t;
+
+		out_pos -= 1;
+	}
+
+	return v;
+}
+
+inline fn __mzd_from_bitstream_tapes_verify(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[secret] stack u8[MZD_SIZE] v,
+	#[public] reg 	u64 pos
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	a = _mzd_from_bitstream_tapes_verify(bs,a,pos);
+	v = a;
+	
+	return v;
+}
+
+
+fn _bitstream_put_bits_tapes(
+	  #[secret] reg ptr u8[TAPES_FULL_SIZE] bs
+	, #[secret] reg u64 value 
+	, #[public] reg u64 position num_bits
+) -> reg ptr u8[TAPES_FULL_SIZE]
+{
+	reg u8 p;
+	reg u64 skip_bits start_bits bits aux aux1 aux2 tmp;
+
+	skip_bits = position;
+	skip_bits &= 7;
+
+	aux1 = position;
+    aux1 >>= 3;
+
+	if(skip_bits > 0)
+	{
+    	// the upper skip_bits of current pos have already been taken
+    	start_bits = 8;
+    	start_bits -= skip_bits;
+
+    	if(num_bits < start_bits)
+    	{
+    		bits = num_bits;
+    	}
+    	else
+    	{
+    		bits = start_bits;
+    	}
+
+    	aux1 = position;
+    	aux1 >>= 3;
+
+    	aux = 0xFF;
+    	tmp = start_bits;
+    	_, _, _, _, _, aux = #SHL(aux, tmp);
+    	aux2 = 0xFF;
+    	tmp = skip_bits;
+    	tmp += bits;
+    	_, _, _, _, _, aux2 = #SHR(aux2, tmp);
+    	aux |= aux2;
+  
+    	p = bs[aux1];
+
+    	p &= aux;
+		bs[aux1] = p;
+
+		aux = value;
+		tmp = num_bits;
+		tmp -= bits;
+		_, _, _, _, _, aux = #SHR(aux, tmp);
+		tmp = start_bits;
+		tmp -= bits;
+		_, _, _, _, _, aux = #SHL(aux, tmp);
+
+    	p = bs[aux1];
+    	p |= aux;
+		bs[aux1] = p;	
+
+	    num_bits -= bits;
+		aux1 += 1;
+	}
+
+	while(num_bits >= 8)
+	{
+		aux = value;
+		tmp = num_bits;
+		tmp -= 8;
+		_, _, _, _, _, aux = #SHR(aux, tmp);
+		p = (8u) aux;
+
+		bs[aux1] = p;
+
+		num_bits -= 8;
+		aux1 += 1;
+	}
+
+	if(num_bits > 0)
+	{
+		p = bs[aux1];
+		aux = 0xFF;
+		tmp = num_bits;
+		_, _, _, _, _, aux = #SHR(aux, tmp);
+		p &= aux;				 // clear bits before setting
+		
+		aux = 1;
+		tmp = num_bits;
+		_, _, _, _, _, aux = #SHL(aux, tmp);
+		aux -= 1;
+		value &= aux;
+		tmp = 8;
+		tmp -= num_bits;
+		_, _, _, _, _, value = #SHL(value, tmp);
+		p |= value;
+
+		bs[aux1] = p;
+	}
+
+  return bs;
+}
+
+
+fn _mzd_to_bitstream_tapes(
+	#[secret] reg ptr u8[TAPES_FULL_SIZE] bs,
+	#[secret] reg ptr u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[TAPES_FULL_SIZE]
+{
+	reg u64 bits out_pos t num_bits;
+
+	bits = LOWMC_N_BITS;
+	out_pos = (MZD_U64_SIZE - 1);
+
+	while(bits >= 64)
+	{
+		t = v[u64 out_pos];
+		num_bits = 64;
+		bs = _bitstream_put_bits_tapes(bs, t, pos, num_bits);
+
+		out_pos -= 1;
+		bits -= 64;
+		pos += 64;
+	}
+
+	if(bits > 0)
+	{
+		t = v[u64 out_pos];
+		num_bits = 64;
+		num_bits -= bits;
+		_, _, _, _, _, t = #SHR(t, num_bits);
+
+		num_bits = bits;
+		bs = _bitstream_put_bits_tapes(bs, t, pos, num_bits);
+		
+		out_pos -= 1;
+	}
+ 
+	return bs;
+}
+
+inline fn __mzd_to_bitstream_tapes(
+	#[secret] reg ptr u8[TAPES_FULL_SIZE] bs,
+	#[secret] stack u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[TAPES_FULL_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	bs = _mzd_to_bitstream_tapes(bs,a,pos);
+	
+	return bs;
+}
+
+fn _bitstream_put_bits_tapes2(
+	  #[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs
+	, #[secret] reg u64 value 
+	, #[public] reg u64 position num_bits
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+	reg u8 p;
+	reg u64 skip_bits start_bits bits aux aux1 aux2 tmp;
+
+	skip_bits = position;
+	skip_bits &= 7;
+
+	aux1 = position;
+    aux1 >>= 3;
+
+	if(skip_bits > 0)
+	{
+    	// the upper skip_bits of current pos have already been taken
+    	start_bits = 8;
+    	start_bits -= skip_bits;
+
+    	if(num_bits < start_bits)
+    	{
+    		bits = num_bits;
+    	}
+    	else
+    	{
+    		bits = start_bits;
+    	}
+
+    	aux1 = position;
+    	aux1 >>= 3;
+
+    	aux = 0xFF;
+    	tmp = start_bits;
+    	_, _, _, _, _, aux = #SHL(aux, tmp);
+    	aux2 = 0xFF;
+    	tmp = skip_bits;
+    	tmp += bits;
+    	_, _, _, _, _, aux2 = #SHR(aux2, tmp);
+    	aux |= aux2;
+  
+    	p = bs[aux1];
+
+    	p &= aux;
+		bs[aux1] = p;
+
+		aux = value;
+		tmp = num_bits;
+		tmp -= bits;
+		_, _, _, _, _, aux = #SHR(aux, tmp);
+		tmp = start_bits;
+		tmp -= bits;
+		_, _, _, _, _, aux = #SHL(aux, tmp);
+
+    	p = bs[aux1];
+    	p |= aux;
+		bs[aux1] = p;	
+
+	    num_bits -= bits;
+		aux1 += 1;
+	}
+
+	while(num_bits >= 8)
+	{
+		aux = value;
+		tmp = num_bits;
+		tmp -= 8;
+		_, _, _, _, _, aux = #SHR(aux, tmp);
+		p = (8u) aux;
+
+		bs[aux1] = p;
+
+		num_bits -= 8;
+		aux1 += 1;
+	}
+
+	if(num_bits > 0)
+	{
+		p = bs[aux1];
+		aux = 0xFF;
+		tmp = num_bits;
+		_, _, _, _, _, aux = #SHR(aux, tmp);
+		p &= aux;				 // clear bits before setting
+		
+		aux = 1;
+		tmp = num_bits;
+		_, _, _, _, _, aux = #SHL(aux, tmp);
+		aux -= 1;
+		value &= aux;
+		tmp = 8;
+		tmp -= num_bits;
+		_, _, _, _, _, value = #SHL(value, tmp);
+		p |= value;
+
+		bs[aux1] = p;
+	}
+
+  return bs;
+}
+
+fn _mzd_to_bitstream_tapes2(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[secret] reg ptr u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+	reg u64 bits out_pos t num_bits;
+
+	bits = LOWMC_N_BITS;
+	out_pos = (MZD_U64_SIZE - 1);
+
+	while(bits >= 64)
+	{
+		t = v[u64 out_pos];
+		num_bits = 64;
+		bs = _bitstream_put_bits_tapes2(bs, t, pos, num_bits);
+
+		out_pos -= 1;
+		bits -= 64;
+		pos += 64;
+	}
+
+	if(bits > 0)
+	{
+		t = v[u64 out_pos];
+		num_bits = 64;
+		num_bits -= bits;
+		_, _, _, _, _, t = #SHR(t, num_bits);
+
+		num_bits = bits;
+		bs = _bitstream_put_bits_tapes2(bs, t, pos, num_bits);
+		
+		out_pos -= 1;
+	}
+ 
+	return bs;
+}
+
+inline fn __mzd_to_bitstream_tapes2(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bs,
+	#[secret] stack u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	bs = _mzd_to_bitstream_tapes2(bs,a,pos);
+	
+	return bs;
+}
+
+
+fn _bitstream_put_bits_msgs(
+	  #[secret] reg ptr u8[MSGS_FULL_SIZE] bs
+	, #[secret] reg u64 value
+	, #[public] reg u64 position num_bits
+) -> reg ptr u8[MSGS_FULL_SIZE]
+{
+	reg u8 p;
+	reg u64 skip_bits start_bits bits aux aux1 aux2 tmp;
+
+	stack u64 s_aux1;
+
+	skip_bits = position;
+	skip_bits &= 7;
+
+	aux1 = position;
+    aux1 >>= 3;
+    s_aux1 = aux1;
+
+	if(skip_bits > 0)
+	{
+    	// the upper skip_bits of current pos have already been taken
+    	start_bits = 8;
+    	start_bits -= skip_bits;
+
+    	if(num_bits < start_bits)
+    	{
+    		bits = num_bits;
+    	}
+    	else
+    	{
+    		bits = start_bits;
+    	}
+
+    	aux = 0xFF;
+    	tmp = start_bits;
+    	_, _, _, _, _, aux = #SHL(aux, tmp);
+    	aux2 = 0xFF;
+    	tmp = skip_bits;
+    	tmp += bits;
+    	_, _, _, _, _, aux2 = #SHR(aux2, tmp);
+    	aux |= aux2;
+  
+  		aux1 = s_aux1;
+    	p = bs[aux1];
+
+    	p &= aux;
+		bs[aux1] = p;
+		s_aux1 = aux1;
+
+		aux = value;
+		tmp = num_bits;
+		tmp -= bits;
+		_, _, _, _, _, aux = #SHR(aux, tmp);
+		tmp = start_bits;
+		tmp -= bits;
+		_, _, _, _, _, aux = #SHL(aux, tmp);
+
+		aux1 = s_aux1;
+    	p = bs[aux1];
+    	p |= aux;
+		bs[aux1] = p;	
+
+	    num_bits -= bits;
+		aux1 += 1;
+		s_aux1 = aux1;
+	}
+
+	while(num_bits >= 8)
+	{
+		aux = value;
+		tmp = num_bits;
+		tmp -= 8;
+		_, _, _, _, _, aux = #SHR(aux, tmp);
+		p = (8u) aux;
+
+		aux1 = s_aux1;
+		bs[aux1] = p;
+
+		num_bits -= 8;
+		aux1 += 1;
+		s_aux1 = aux1;
+	}
+
+	if(num_bits > 0)
+	{
+		aux1 = s_aux1;
+		p = bs[aux1];
+		aux = 0xFF;
+		tmp = num_bits;
+		_, _, _, _, _, aux = #SHR(aux, tmp);
+		p &= aux;				 // clear bits before setting
+		
+		aux = 1;
+		tmp = num_bits;
+		_, _, _, _, _, aux = #SHL(aux, tmp);
+		aux -= 1;
+		value &= aux;
+		tmp = 8;
+		tmp -= num_bits;
+		_, _, _, _, _, value = #SHL(value, tmp);
+		p |= value;
+
+		aux1 = s_aux1;
+		bs[aux1] = p;
+	}
+
+  return bs;
+}
+
+
+fn _mzd_to_bitstream_msgs(
+	#[secret] reg ptr u8[MSGS_FULL_SIZE] bs,
+	#[secret] reg ptr u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[MSGS_FULL_SIZE]
+{
+	reg u64 bits out_pos t num_bits;
+
+	bits = LOWMC_N_BITS;
+	out_pos = (MZD_U64_SIZE - 1);
+
+	while(bits >= 64)
+	{
+		t = v[u64 out_pos];
+		num_bits = 64;
+		bs = _bitstream_put_bits_msgs(bs, t, pos, num_bits);
+
+		out_pos -= 1;
+		bits -= 64;
+		pos += 64;
+	}
+
+	if(bits > 0)
+	{
+		t = v[u64 out_pos];
+		num_bits = 64;
+		num_bits -= bits;
+		_, _, _, _, _, t = #SHR(t, num_bits);
+
+		num_bits = bits;
+		bs = _bitstream_put_bits_msgs(bs, t, pos, num_bits);
+		
+		out_pos -= 1;
+	}
+ 
+	return bs;
+}
+
+inline fn __mzd_to_bitstream_msgs(
+	#[secret] reg ptr u8[MSGS_FULL_SIZE] bs,
+	#[secret] stack u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[MSGS_FULL_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	bs = _mzd_to_bitstream_msgs(bs,a,pos);
+	
+	return bs;
+}
+
+
+fn _bitstream_put_bits_msgs2(
+	  #[secret] reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] bs
+	, #[secret] reg u64 value
+	, #[public] reg u64 position num_bits
+) -> reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+	reg u8 p;
+	reg u64 skip_bits start_bits bits aux aux1 aux2 tmp;
+
+	stack u64 s_aux1;
+
+	skip_bits = position;
+	skip_bits &= 7;
+
+	aux1 = position;
+    aux1 >>= 3;
+    s_aux1 = aux1;
+
+	if(skip_bits > 0)
+	{
+    	// the upper skip_bits of current pos have already been taken
+    	start_bits = 8;
+    	start_bits -= skip_bits;
+
+    	if(num_bits < start_bits)
+    	{
+    		bits = num_bits;
+    	}
+    	else
+    	{
+    		bits = start_bits;
+    	}
+
+    	aux = 0xFF;
+    	tmp = start_bits;
+    	_, _, _, _, _, aux = #SHL(aux, tmp);
+    	aux2 = 0xFF;
+    	tmp = skip_bits;
+    	tmp += bits;
+    	_, _, _, _, _, aux2 = #SHR(aux2, tmp);
+    	aux |= aux2;
+  
+  		aux1 = s_aux1;
+    	p = bs[aux1];
+
+    	p &= aux;
+		bs[aux1] = p;
+		s_aux1 = aux1;
+
+		aux = value;
+		tmp = num_bits;
+		tmp -= bits;
+		_, _, _, _, _, aux = #SHR(aux, tmp);
+		tmp = start_bits;
+		tmp -= bits;
+		_, _, _, _, _, aux = #SHL(aux, tmp);
+
+		aux1 = s_aux1;
+    	p = bs[aux1];
+    	p |= aux;
+		bs[aux1] = p;	
+
+	    num_bits -= bits;
+		aux1 += 1;
+		s_aux1 = aux1;
+	}
+
+	while(num_bits >= 8)
+	{
+		aux = value;
+		tmp = num_bits;
+		tmp -= 8;
+		_, _, _, _, _, aux = #SHR(aux, tmp);
+		p = (8u) aux;
+
+		aux1 = s_aux1;
+		bs[aux1] = p;
+
+		num_bits -= 8;
+		aux1 += 1;
+		s_aux1 = aux1;
+	}
+
+	if(num_bits > 0)
+	{
+		aux1 = s_aux1;
+		p = bs[aux1];
+		aux = 0xFF;
+		tmp = num_bits;
+		_, _, _, _, _, aux = #SHR(aux, tmp);
+		p &= aux;				 // clear bits before setting
+		
+		aux = 1;
+		tmp = num_bits;
+		_, _, _, _, _, aux = #SHL(aux, tmp);
+		aux -= 1;
+		value &= aux;
+		tmp = 8;
+		tmp -= num_bits;
+		_, _, _, _, _, value = #SHL(value, tmp);
+		p |= value;
+
+		aux1 = s_aux1;
+		bs[aux1] = p;
+	}
+
+  return bs;
+}
+
+
+fn _mzd_to_bitstream_msgs2(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] bs,
+	#[secret] reg ptr u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+	reg u64 bits out_pos t num_bits;
+
+	bits = LOWMC_N_BITS;
+	out_pos = (MZD_U64_SIZE - 1);
+
+	while(bits >= 64)
+	{
+		t = v[u64 out_pos];
+		num_bits = 64;
+		bs = _bitstream_put_bits_msgs2(bs, t, pos, num_bits);
+
+		out_pos -= 1;
+		bits -= 64;
+		pos += 64;
+	}
+
+	if(bits > 0)
+	{
+		t = v[u64 out_pos];
+		num_bits = 64;
+		num_bits -= bits;
+		_, _, _, _, _, t = #SHR(t, num_bits);
+
+		num_bits = bits;
+		bs = _bitstream_put_bits_msgs2(bs, t, pos, num_bits);
+		
+		out_pos -= 1;
+	}
+ 
+	return bs;
+}
+
+inline fn __mzd_to_bitstream_msgs2(
+	#[secret] reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] bs,
+	#[secret] stack u8[MZD_SIZE] v,
+	#[public] reg u64 pos
+) -> reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	bs = _mzd_to_bitstream_msgs2(bs,a,pos);
+	
+	return bs;
+}
+
+
+
+

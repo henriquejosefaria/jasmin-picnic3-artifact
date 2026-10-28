@@ -1,0 +1,240 @@
+require "params.jinc"
+require "picnic3_tree_verify.jinc"
+require "picnic3_aux.jinc"
+require "picnic3_simulate_transitions.jinc"
+
+
+/*
+ * Recompute each player's commit using the recomputed seeds and tapes.
+ */
+inline
+fn __retrieveCommitments(
+	stack u8[COMMITMENTS_FULL_SIZE] commitments,
+	stack u8[CHALLENGE_C_SIZE] challengeC,
+	stack u8[CHALLENGE_P_SIZE] challengeP,
+	stack u8[PROOFS_FULL_SIZE] proofs,
+	reg ptr u8[TAPES_FULL_SIZE] tapes,
+	stack u8[TREE_NODES_2_SIZE] seeds,
+	stack u8[PNC_SALT_SIZE] salt,
+	reg 	u64 round,
+	reg 	u16 round_u16,
+	reg		u64 proof_round
+) -> stack u8[COMMITMENTS_FULL_SIZE], reg ptr u8[TAPES_FULL_SIZE], reg u64
+{
+	reg u8 t8;
+	reg u16 player unopened;
+	reg u64 P_index idx out_idx in_idx;
+
+	stack u16 s_round_u16;
+	stack u64 s_round s_proof_round;
+
+	stack u16 s_unopened;
+
+	stack u8[MZD_SIZE] lowmc_key;
+
+ 	reg ptr u8[MZD_SIZE] reg_lowmc_key;
+
+	s_round = round;
+	s_round_u16 = round_u16;
+	s_proof_round = proof_round;
+	
+	t8 = __contains_challengeC_2(challengeC, round_u16);
+
+	if(t8 == 0)
+	{
+		/* We're given iSeed, have expanded the seeds, compute aux from scratch so we can compute Com[t] */
+
+        reg_lowmc_key = lowmc_key;
+        tapes, _ = __computeAuxTape_aux(tapes, reg_lowmc_key);
+        () = #spill(tapes);
+
+        player = 0;
+        round_u16 = s_round_u16;
+        commitments = __commit_x4_verify(commitments, seeds, salt, round_u16, player);
+   	
+        player = 4;
+        round_u16 = s_round_u16;
+        commitments = __commit_x4_verify(commitments, seeds, salt, round_u16, player);
+
+        player = 8;
+        round_u16 = s_round_u16;
+        commitments = __commit_x4_verify(commitments, seeds, salt, round_u16, player);
+
+        player = 12;
+        round_u16 = s_round_u16;
+        commitments = __commit_x4_verify(commitments, seeds, salt, round_u16, player);
+        
+        () = #unspill(tapes);
+		player = 15;
+	    round = s_round;
+	    commitments = __commit_verify(commitments, seeds, tapes, salt, round, player);
+
+        /* after we have checked the tape, we do not need it anymore for this opened iteration */
+	}
+	else
+	{
+		/* We're given all seeds and aux bits, exept for the unopened
+        * party, we get their commitment */
+        round_u16 = s_round_u16;
+		P_index = __indexOf(challengeC, round_u16);
+
+		unopened = challengeP[:u16 (uint)P_index];
+		s_unopened = unopened;
+
+		player = 0;
+        round_u16 = s_round_u16;
+        commitments = __commit_x4_verify(commitments, seeds, salt, round_u16, player);
+	    
+        player = 4;
+        round_u16 = s_round_u16;
+        commitments = __commit_x4_verify(commitments, seeds, salt, round_u16, player);
+
+        player = 8;
+        round_u16 = s_round_u16;
+        commitments = __commit_x4_verify(commitments, seeds, salt, round_u16, player);
+
+        player = 12;
+        round_u16 = s_round_u16;
+        commitments = __commit_x4_verify(commitments, seeds, salt, round_u16, player);
+  
+        unopened = s_unopened;
+        if(unopened != LAST_PLAYER)
+		{
+			player = 15;
+	        round = s_round;
+	        proof_round = s_proof_round;
+	        commitments = __commit_verify_v2(commitments, seeds, proofs, salt, round, proof_round, player);
+        }
+
+	    unopened = s_unopened;
+        idx = (64u) unopened;
+        out_idx = s_round;
+        in_idx = s_proof_round;
+        commitments = __copy_unnopened_party_commit(commitments, proofs, idx, out_idx, in_idx);
+	    
+	    proof_round = s_proof_round;
+        proof_round += 1;
+        s_proof_round = proof_round;
+	}
+
+	proof_round = s_proof_round;
+	return commitments, tapes, proof_round;
+}
+
+/*
+ * This function recomputes all online rounds of PICNIC3 for N parties
+ * using the messages traces, the recomputed tapes and the plaintext. 
+ */
+inline
+fn __recompute_mpc(
+	stack u8[SIG_CHALLENGE_P_SIZE] challengeP,
+	stack u8[SIG_CHALLENGE_C_SIZE] challengeC,
+	stack u8[SIG_PROOFS_SIZE] proofs,
+	stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+	stack u8[MZD_SIZE] m_plaintext,
+	stack u8[CV_FULL_SIZE] cv
+) -> stack u8[CV_FULL_SIZE], stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+	reg u16 t unopened;
+	reg u64 out_idx in_idx idx i;
+
+	reg u256 ymm0;
+
+	stack u8[MSGS_FULL_SIZE] msgs;
+	stack u8[MZD_SIZE] m_maskedKey;
+
+	stack u16 s_t s_unopened;
+	stack u64 proof_idx s_i;
+
+	inline int z;
+
+	i = 0;
+	while(i < PNC_N_OPENED_ROUNDS)
+	{
+		/* 2. When t is in C, we have everything we need to re-compute 	the view, as an honest signer would.
+	    * We simulate the MPC with one fewer party; the unopened party's values are all set to zero.
+	    */
+
+	    t = challengeC[:u16 (uint)i];
+	    s_t = t;
+
+	    unopened = challengeP[:u16 (uint)i];
+	    s_unopened = unopened;
+	    s_i = i;
+
+	    t = s_t;
+	    out_idx = (64u)t;
+	    out_idx *= TAPES_FULL_SIZE;
+	    out_idx += TAPE_TAPES_IDX;
+	    
+	    t = s_t;
+	    in_idx = __get_orderChallengeC(challengeC, t); 
+	    proof_idx = in_idx;
+	    in_idx *= PROOF_FULL_SIZE;
+	    in_idx += PROOF_AUX_IDX;
+
+	    tapes = __setAuxBits(tapes, proofs, out_idx, in_idx);
+
+	    t = s_t;
+	    out_idx = (64u)t;
+	    out_idx *= TAPES_FULL_SIZE;
+	    out_idx += TAPE_TAPES_IDX;
+
+	    unopened = s_unopened;
+	    idx = (64u) unopened;
+	    idx *= TAPE_SIZE_BYTES;
+	    out_idx += idx;
+
+	    ymm0 = #set0_256();
+
+	    // FILL the unrecomputed tape to zeros
+	    idx = 0;
+	    while(idx < TAPE_SIZE_BYTES)
+	    {
+	    	tapes.[:u256 out_idx] = ymm0;
+
+	    	out_idx += 32;
+	    	idx += 32;
+	    }
+
+		for z=0 to (MSGS_FULL_SIZE >> 5)
+	    {
+	    	msgs[:u256 z] = ymm0;
+	    }
+
+	    unopened = s_unopened;
+		out_idx = (64u) unopened;
+		out_idx *= PNC_VIEW_SIZE;
+
+		in_idx = proof_idx;
+	    in_idx *= PROOF_FULL_SIZE;
+	    in_idx += PROOF_MSGS_IDX;
+
+		msgs = __copy_msg_from_proofs_to_msgs(msgs, proofs, out_idx, in_idx);	
+
+		in_idx = proof_idx; 
+	    in_idx *= PROOF_FULL_SIZE;
+	    in_idx += PROOF_INPUT_IDX;    
+
+		m_maskedKey = __mzd_from_char_array_2(m_maskedKey, proofs, in_idx);
+
+		t = s_t;
+		i = (64u)t;
+	    idx = (64u) unopened;
+	    unopened = s_unopened;
+		msgs = __simulateOnline_verify(m_maskedKey, tapes, msgs, m_plaintext, i, idx);
+
+		t = s_t;
+	    idx = proof_idx;
+	    out_idx = (64u) t;
+		cv = __commit_v_verify(cv, proofs, msgs, out_idx, idx);
+
+		i = s_i;
+		i = i + 1;
+	}
+
+	return cv, tapes;
+}
+
+
+

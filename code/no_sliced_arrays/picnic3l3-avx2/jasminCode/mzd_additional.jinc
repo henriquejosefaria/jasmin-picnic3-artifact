@@ -1,0 +1,512 @@
+require "copy.jinc"
+require "params.jinc"
+
+/*
+ * This function copies MZD_SIZE bytes between two arrays.
+ */
+fn _mzd_copy_uint64_192(
+	#[poly=y] reg ptr u8[MZD_SIZE] x,
+	#[poly=y] reg ptr u8[MZD_SIZE] y
+) -> reg ptr u8[MZD_SIZE]
+{
+
+	reg u256 t;
+	t = y[:u256 0];
+	x[:u256 0] = t;
+
+	return x;
+}
+
+/*
+ * This function XORs MZD_SIZE bytes between two arrays.
+ */
+fn _mzd_xor_uint64_block(
+	#[secret] reg ptr u8[MZD_SIZE] r_block_j,
+	#[secret] reg ptr u8[MZD_SIZE] f_block_j,
+	#[secret] reg ptr u8[MZD_SIZE] s_block_j
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u256 t;
+
+	t = f_block_j[:u256 0];
+	t ^= s_block_j[:u256 0];
+	r_block_j[:u256 0] = t;
+
+	return r_block_j;
+}
+
+/*
+ * This function ANDs MZD_SIZE bytes between two arrays.
+ */
+fn _mzd_and_uint64_block(
+	#[secret] reg ptr u8[MZD_SIZE] r_block_j,
+	#[secret] reg ptr u8[MZD_SIZE] f_block_j,
+	#[secret] reg ptr u8[MZD_SIZE] s_block_j
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t;
+
+	t = f_block_j[:u64 0];
+	t &= s_block_j[:u64 0];
+	r_block_j[:u64 0] = t;
+
+	t = f_block_j[:u64 1];
+	t &= s_block_j[:u64 1];
+	r_block_j[:u64 1] = t;
+
+	t = f_block_j[:u64 2];
+	t &= s_block_j[:u64 2];
+	r_block_j[:u64 2] = t;
+
+	return r_block_j;
+}
+
+/*
+ * This function shifts an array's MZD_SIZE bytes 2 bits left.
+ */
+fn _mzd_shift2_left_uint64_192(
+	#[poly=block] reg ptr u8[MZD_SIZE] r_block,
+	#[poly=block] reg ptr u8[MZD_SIZE] block
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t1 t2;
+
+
+	t1  = block[:u64 2];
+	t2 = block[:u64 1];
+
+	t1 = t1 << 2;
+	t2 = t2 >> 62;
+	t1 |= t2;
+
+	r_block[:u64 2] = t1;
+
+
+	t1  = block[:u64 1];
+	t2 = block[:u64 0];
+
+	t1 = t1 << 2;
+	t2 = t2 >> 62;
+	t1 |= t2;
+
+	r_block[:u64 1] = t1;
+
+
+	t1  = block[:u64 0];
+	
+	t1 = t1 << 2;
+
+	r_block[:u64 0] = t1;
+
+	return r_block;
+}
+
+/*
+ * This function shifts an array's MZD_SIZE bytes 1 bit left.
+ */
+fn _mzd_shift1_left_uint64_192(
+	#[poly=block] reg ptr u8[MZD_SIZE] r_block,
+	#[poly=block] reg ptr u8[MZD_SIZE] block
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t1 t2;
+
+	t1  = block[:u64 2];
+	t2 = block[:u64 1];
+
+	t1 = t1 << 1;
+	t2 = t2 >> 63;
+	t1 |= t2;
+
+	r_block[:u64 2] = t1;
+
+
+	t1  = block[:u64 1];
+	t2 = block[:u64 0];
+
+	t1 = t1 << 1;
+	t2 = t2 >> 63;
+	t1 |= t2;
+
+	r_block[:u64 1] = t1;
+
+
+	t1  = block[:u64 0];
+	
+	t1 = t1 << 1;
+
+	r_block[:u64 0] = t1;
+	
+	return r_block;
+}
+
+/*
+ * This function shifts an array's MZD_SIZE bytes 2 bits right.
+ */
+fn _mzd_shift2_right_uint64_192(
+	#[poly=block] reg ptr u8[MZD_SIZE] r_block,
+	#[poly=block] reg ptr u8[MZD_SIZE] block
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t1 t2;
+
+	t1  = block[:u64 0];
+	t2 = block[:u64 1];
+
+	t1 = t1 >> 2;
+	t2 = t2 << 62;
+	t1 |= t2;
+
+	r_block[:u64 0] = t1;
+
+
+	t1  = block[:u64 1];
+	t2 = block[:u64 2];
+
+	t1 = t1 >> 2;
+	t2 = t2 << 62;
+	t1 |= t2;
+
+	r_block[:u64 1] = t1;
+
+
+	t1  = block[:u64 2];
+	
+	t1 = t1 >> 2;
+
+	r_block[:u64 2] = t1;
+
+	return r_block;
+}
+
+/*
+ * This function shifts an array's MZD_SIZE bytes 1 bit right.
+ */
+fn _mzd_shift1_right_uint64_192(
+	#[poly=block] reg ptr u8[MZD_SIZE] r_block,
+	#[poly=block] reg ptr u8[MZD_SIZE] block
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t1 t2;
+
+	t1  = block[:u64 0];
+	t2 = block[:u64 1];
+
+	t1 = t1 >> 1;
+	t2 = t2 << 63;
+	t1 |= t2;
+
+	r_block[:u64 0] = t1;
+
+
+	t1  = block[:u64 1];
+	t2 = block[:u64 2];
+
+	t1 = t1 >> 1;
+	t2 = t2 << 63;
+	t1 |= t2;
+
+	r_block[:u64 1] = t1;
+
+
+	t1  = block[:u64 2];
+	
+	t1 = t1 >> 1;
+
+	r_block[:u64 2] = t1;
+
+	return r_block;
+}
+
+/*
+ * This function rotates an array 1 u64 word left.
+ */
+fn __mzd_rotate_left_uint64_192(
+	reg ptr u8[MZD_SIZE] r_block,
+	reg ptr u8[MZD_SIZE] block,
+	reg u64 count
+) -> reg ptr u8[MZD_SIZE]
+{
+
+	reg u64 t1 t2 right_count tmp;
+
+	right_count = 64;
+	right_count -= count;
+
+
+	t1 = block[:u64 2];
+	t2 = block[:u64 1];
+
+	tmp = count;
+	_, _, _, _, _, t1 = #SHL(t1, tmp);
+	tmp = right_count;
+	_, _, _, _, _, t2 = #SHR(t2, tmp);
+	t1 |= t2;
+
+	r_block[:u64 2] = t1;
+
+
+	t1 = block[:u64 1];
+	t2 = block[:u64 0];
+	
+	tmp = count;
+	_, _, _, _, _, t1 = #SHL(t1, tmp);
+	tmp = right_count;
+	_, _, _, _, _, t2 = #SHR(t2, tmp);
+	t1 |= t2;
+
+	r_block[:u64 1] = t1;
+
+
+	t1 = block[:u64 0];
+	t2 = block[:u64 2];
+	
+	tmp = count;
+	_, _, _, _, _, t1 = #SHL(t1, tmp);
+	tmp = right_count;
+	_, _, _, _, _, t2 = #SHR(t2, tmp);
+	t1 |= t2;
+
+	r_block[:u64 0] = t1;
+
+	return r_block;
+}
+
+/*
+ * This function rotates an array 1 u64 word right.
+ */
+fn __mzd_rotate_right_uint64_192(
+	reg ptr u8[MZD_SIZE] r_block,
+	reg ptr u8[MZD_SIZE] block,
+	reg u64 count
+) -> reg ptr u8[MZD_SIZE]
+{
+
+	reg u64 t1 t2 left_count;
+	stack u64 s_count s_left_count;
+
+	left_count = 64;
+	left_count -= count;
+	s_left_count = left_count;
+	s_count = count;
+	
+	t1 = block[:u64 0];
+	t2 = block[:u64 1];
+
+	_, _, _, _, _, t1 = #SHR(t1, count);
+	_, _, _, _, _, t2 = #SHL(t2, left_count);
+	t1 |= t2;
+
+	r_block[:u64 0] = t1;
+
+	
+	t1 = block[:u64 1];
+	t2 = block[:u64 2];
+
+	_, _, _, _, _, t1 = #SHR(t1,count);
+	_, _, _, _, _, t2 = #SHL(t2, left_count);
+	t1 |= t2;
+
+	r_block[:u64 1] = t1;
+
+
+	t1 = block[:u64 2];
+	t2 = block[:u64 0];
+
+	_, _, _, _, _, t1 = #SHR(t1,count);
+	_, _, _, _, _, t2 = #SHL(t2, left_count);
+	t1 |= t2;
+
+	r_block[:u64 2] = t1;
+	
+
+	return r_block;
+}
+
+/*
+/*
+ * This function applies a mask to all words of an array.
+ */
+fn __mzd_xor_mask_uint64_block(
+	  reg ptr u8[MZD_SIZE] r_block,
+	  reg ptr u64[MATRIX_ROUND] f_block,
+	  reg u64 mask,
+	 #public reg u64 f_block_idx
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t;
+
+	t = f_block[:u64 (uint) f_block_idx];
+	t &= mask;
+	t ^= r_block[:u64 0];
+
+	r_block[:u64 0] = t;
+
+	
+	t = f_block[:u64 (uint) f_block_idx + 1];
+	t &= mask;
+	t ^= r_block[:u64 1];
+
+	r_block[:u64 1] = t;
+
+	
+	t = f_block[:u64 (uint) f_block_idx + 2];
+	t &= mask;
+	t ^= r_block[:u64 2];
+	
+	r_block[:u64 2] = t;
+
+
+	return r_block;	
+}
+*/
+
+/*
+ * This function computes c_block + vptr * a_block
+ */
+fn _mzd_addmul_v_uint64_192(
+	#[secret] reg ptr u8[MZD_SIZE] c_block vptr,
+	#[secret] reg ptr u64[MATRIX_ROUND] a_block
+) -> reg ptr u8[MZD_SIZE]
+{
+
+	reg u64 i1 i2 v mask base_matrix;
+	reg u128 xmm0 xmm1 xmm4 xmm5;
+	reg u256 ymm0 ymm1 ymm2 ymm3;
+
+	
+	ymm2 = c_block[:u256 0];
+	ymm3 = #set0_256();
+
+
+	i1 = 0;
+	base_matrix = 0;
+	while( i1 < MZD_SIZE-8)
+	{
+		v = vptr.[:u64 i1];
+
+		i2 = 0;
+		while( i2 < 64)
+		{
+			// mask = rax; v = rsi;
+
+			mask = v;									// movq		%rsi, %rax
+			base_matrix += 128;							// subq		$-128, %rcx
+			mask &= 1;									// andl		$1, %eax
+			_, _, _, _, _, mask = #NEG_64(mask);		// negq		%rax
+
+			xmm0 = (128u) mask;							// vmovq 	%rax, %xmm0
+			mask = v;									// movq		%rsi, %rax
+			_, _, _, _, _, mask = #SAL(mask,62);		// salq		$62, %rax
+			ymm0 = #VPBROADCAST_4u64(xmm0);				// vpbroadcastq	%xmm0, %ymm0
+			ymm0 &= a_block.[:u256 base_matrix - 128];	// vpand	-128(%rcx), %ymm0, %ymm0
+			_, _, _, _, _, mask = #SAR(mask,63);		// sarq		$63, %rax
+
+			xmm1 = (128u) mask;							// vmovq	%rax, %xmm1
+			mask = v;									// movq		%rsi, %rax
+			ymm2 ^= ymm0;								// vpxor	%ymm2, %ymm0, %ymm2
+			_, _, _, _, _, mask = #SAL(mask,61);		// salq		$61, %rax
+			ymm1 = #VPBROADCAST_4u64(xmm1);				// vpbroadcastq	%xmm1, %ymm1
+			ymm1 &= a_block.[:u256 base_matrix - 96];	// vpand	-96(%rcx), %ymm1, %ymm1
+			_, _, _, _, _, mask = #SAR(mask,63);		// sarq		$63, %rax
+
+			xmm4 = (128u) mask;							// vmovq	%rax, %xmm4
+			mask = v;									// movq		%rsi, %rax
+			v >>= 4;									// shrq		$4, %rsi
+			_, _, _, _, _, mask = #SAL(mask,60);		// salq		$60, %rax
+			ymm0 = #VPBROADCAST_4u64(xmm4);				// vpbroadcastq	%xmm4, %ymm0
+			ymm0 &= a_block.[:u256 base_matrix - 64];	// vpand	-64(%rcx), %ymm0, %ymm0
+			_, _, _, _, _, mask = #SAR(mask,63);		// sarq		$63, %rax
+
+			xmm5 = (128u) mask;							// vmovq	%rax, %xmm5
+			ymm2 ^= ymm0;								// vpxor	%ymm0, %ymm2, %ymm2
+			ymm0 = #VPBROADCAST_4u64(xmm5);				// vpbroadcastq	%xmm5, %ymm0
+			ymm0 &= a_block.[:u256 base_matrix - 32];	// vpand	-32(%rcx), %ymm0, %ymm0
+			ymm0 ^= ymm1;								// vpxor	%ymm1, %ymm0, %ymm0
+			ymm3 ^= ymm0;								// vpxor	%ymm3, %ymm0, %ymm3
+
+			i2 += 4;
+		}
+
+		i1 += 8;
+	}
+
+	ymm3 ^= ymm2;			// vpxor	%ymm2, %ymm3, %ymm3
+	c_block[:u256 0] = ymm3; // vmovdqa	%ymm3, (%rdi)
+
+	return c_block;
+}
+
+fn _mzd_addmul_v_uint64_192_v2(
+	reg u256 ymm2,
+	  reg ptr u8[MZD_SIZE] vptr,
+	  reg ptr u64[MATRIX_ROUND] a_block
+) -> reg u256
+{
+
+	reg u64 i1 i2 v mask base_matrix;
+	reg u128 xmm0 xmm1 xmm4 xmm5;
+	reg u256 ymm0 ymm1 ymm3;
+
+
+	ymm3 = #set0_256();
+
+	i1 = 0;
+	base_matrix = 0;
+	while( i1 < MZD_SIZE-8)
+	{
+		v = vptr.[:u64 i1];
+
+		i2 = 0;
+		while( i2 < 64)
+		{
+			// mask = rax; v = rsi;
+
+			mask = v;									// movq		%rsi, %rax
+			base_matrix += 128;							// subq		$-128, %rcx
+			mask &= 1;									// andl		$1, %eax
+			_, _, _, _, _, mask = #NEG_64(mask);		// negq		%rax
+
+			xmm0 = (128u) mask;							// vmovq 	%rax, %xmm0
+			mask = v;									// movq		%rsi, %rax
+			_, _, _, _, _, mask = #SAL(mask,62);		// salq		$62, %rax
+			ymm0 = #VPBROADCAST_4u64(xmm0);				// vpbroadcastq	%xmm0, %ymm0
+			ymm0 &= a_block.[:u256 base_matrix - 128];	// vpand	-128(%rcx), %ymm0, %ymm0
+			_, _, _, _, _, mask = #SAR(mask,63);		// sarq		$63, %rax
+
+			xmm1 = (128u) mask;							// vmovq	%rax, %xmm1
+			mask = v;									// movq		%rsi, %rax
+			ymm2 ^= ymm0;								// vpxor	%ymm2, %ymm0, %ymm2
+			_, _, _, _, _, mask = #SAL(mask,61);		// salq		$61, %rax
+			ymm1 = #VPBROADCAST_4u64(xmm1);				// vpbroadcastq	%xmm1, %ymm1
+			ymm1 &= a_block.[:u256 base_matrix - 96];	// vpand	-96(%rcx), %ymm1, %ymm1
+			_, _, _, _, _, mask = #SAR(mask,63);		// sarq		$63, %rax
+
+			xmm4 = (128u) mask;							// vmovq	%rax, %xmm4
+			mask = v;									// movq		%rsi, %rax
+			v >>= 4;									// shrq		$4, %rsi
+			_, _, _, _, _, mask = #SAL(mask,60);		// salq		$60, %rax
+			ymm0 = #VPBROADCAST_4u64(xmm4);				// vpbroadcastq	%xmm4, %ymm0
+			ymm0 &= a_block.[:u256 base_matrix - 64];	// vpand	-64(%rcx), %ymm0, %ymm0
+			_, _, _, _, _, mask = #SAR(mask,63);		// sarq		$63, %rax
+
+			xmm5 = (128u) mask;							// vmovq	%rax, %xmm5
+			ymm2 ^= ymm0;								// vpxor	%ymm0, %ymm2, %ymm2
+			ymm0 = #VPBROADCAST_4u64(xmm5);				// vpbroadcastq	%xmm5, %ymm0
+			ymm0 &= a_block.[:u256 base_matrix - 32];	// vpand	-32(%rcx), %ymm0, %ymm0
+			ymm0 ^= ymm1;								// vpxor	%ymm1, %ymm0, %ymm0
+			ymm3 ^= ymm0;								// vpxor	%ymm3, %ymm0, %ymm3
+
+			i2 += 4;
+		}
+
+		i1 += 8;
+	}
+
+	ymm2 ^= ymm3;			// vpxor	%ymm2, %ymm3, %ymm3
+
+	return ymm2;
+}
+
+
+

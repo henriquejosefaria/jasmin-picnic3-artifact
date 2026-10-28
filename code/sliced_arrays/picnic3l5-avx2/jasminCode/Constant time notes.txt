@@ -1,0 +1,8 @@
+Constant time notes:
+
+#declassify use explanation: 
+
+File: shake256_avx2_aux.jinc
+
+	Function: __appendUnique(...)
+		This function is used to append a unique round of the MPC protocol to the challengeC. This round is a public value that any adversary can access. It is public

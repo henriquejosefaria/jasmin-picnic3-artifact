@@ -1,0 +1,225 @@
+require "picnic3_aux.jinc"
+require "picnic3_impl.jinc"
+require "picnic3_impl_verify.jinc"
+
+
+inline
+fn __get_proofs_from_sig(
+  stack u8[PROOFS_FULL_SIZE] proofs, 
+  stack u8[CHALLENGE_C_SIZE] challengeC, 
+  stack u8[CHALLENGE_P_SIZE] challengeP, 
+  reg u64 sig,
+  reg u8 t8
+) -> stack u8[PROOFS_FULL_SIZE], reg u8
+{
+  reg u8 c;
+  reg u16 t16 P_index_u16;
+  reg u64 proof_idx P_index;
+
+  stack u16 s_t16;
+  stack u64 s_proof_idx s_sig;
+
+  reg ptr u8[CHALLENGE_C_SIZE] reg_challengeC;
+
+  s_sig = sig;
+
+  c = 0;
+  t16 = 0;
+  s_proof_idx = 0;
+  while(t16 < PNC_N_ROUNDS)
+  { 
+    reg_challengeC = challengeC;
+    c = _contains_challengeC_2(reg_challengeC, t16);
+
+    if(c == 1)
+    { 
+      s_t16 = t16;
+      reg_challengeC = challengeC;
+      P_index = __indexOf(reg_challengeC, t16);
+      P_index_u16 = challengeP[:u16 P_index];
+      s_t16 = t16;
+
+      proof_idx = s_proof_idx;
+      proof_idx *= PROOF_FULL_SIZE;
+      
+      sig = s_sig;
+      proofs, sig, t8 = _copy_proof_from_sig(proofs, sig, proof_idx, P_index_u16, t8);
+      s_sig = sig;
+
+      if(t8 == 1)
+      {
+        s_t16 = PNC_N_ROUNDS;
+      }
+
+      proof_idx = s_proof_idx;
+      proof_idx += 1;
+      s_proof_idx = proof_idx;
+
+      t16 = s_t16;
+    }
+
+    t16 += 1;
+  }
+
+  return proofs, t8;
+}
+
+inline fn __createRandomTapes(
+  #[secret] stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[secret] stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  #[secret] stack u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 t
+) -> stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg u64 idx1 idx2;
+  reg ptr u8[PNC_SALT_SIZE] c;
+  reg ptr u8[TAPES_FULL_SIZE] reg_tapes;
+  reg ptr u8[TREE_NODES_2_SIZE] reg_seeds;
+
+  idx1 = t;
+  idx1 *= TAPES_FULL_SIZE;
+  idx2 = t;
+  idx2 *= TREE_NODES_2_SIZE;
+  c = salt;
+  reg_seeds = seeds[idx2: TREE_NODES_2_SIZE];
+  reg_tapes = tapes[idx1: TAPES_FULL_SIZE]; 
+  () = #spill(idx1);
+
+  reg_tapes = _createRandomTapes(reg_tapes,reg_seeds,c,t);
+
+  () = #unspill(idx1);
+  tapes[idx1: TAPES_FULL_SIZE] = reg_tapes;
+
+  return tapes;
+}
+
+inline fn __createRandomTapes_verify(
+  #[secret] stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[secret] stack u8[TREE_NODES_2_SIZE] seeds,
+  #[secret] stack u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 t
+) -> stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg u64 idx1;
+  reg ptr u8[PNC_SALT_SIZE] c;
+  reg ptr u8[TAPES_FULL_SIZE] reg_tapes;
+  reg ptr u8[TREE_NODES_2_SIZE] reg_seeds;
+
+  c = salt;
+  reg_seeds = seeds;
+
+  idx1 = t;
+  idx1 *= TAPES_FULL_SIZE;
+  reg_tapes = tapes[idx1: TAPES_FULL_SIZE]; 
+  reg_tapes = _createRandomTapes(reg_tapes,reg_seeds,c,t);
+  tapes[idx1: TAPES_FULL_SIZE] = reg_tapes;
+
+  return tapes;
+}
+
+inline
+fn __computeAuxTape(
+	#[secret] stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+	#[secret] stack u8[PNC_N_ROUNDS * MZD_SIZE] input_masks,
+	#[secret] stack u8[MZD_SIZE] privKey,
+	#[public] reg u64 pos
+) -> stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE], stack u8[PNC_N_ROUNDS * MZD_SIZE]
+{
+	reg u64 idx0 idx1;
+
+	reg ptr u8[TAPES_FULL_SIZE] a;
+	reg ptr u8[MZD_SIZE] b;	
+	reg ptr u8[MZD_SIZE] c;
+
+	idx0 = pos;
+	idx0 *= TAPES_FULL_SIZE;
+	a = tapes[idx0: TAPES_FULL_SIZE];
+
+	idx1 = pos;
+	idx1 *= MZD_SIZE;
+	b = input_masks[idx1: MZD_SIZE]; 
+
+	c = privKey;
+
+	a,b = _computeAuxTape(a,b,c);
+	tapes[idx0: TAPES_FULL_SIZE] = a;
+	input_masks[idx1: MZD_SIZE] = b;
+
+	return tapes, input_masks;
+}
+
+inline fn __assemble_proof(
+	#[public]      reg u64 sig, 
+	#[poly=seeds]  stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+	#[public]      stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] seeds_exists,
+	#[poly=tapes]  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[poly=_salt]  stack u8[PNC_SALT_AND_ROOT_LENGTH] saltAndRoot,
+	#[poly=inputs] stack u8[PNC_N_ROUNDS * MZD_SIZE] inputs,
+	#[poly=msgs]   stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+	#[public]      stack u8[CHALLENGE_C_SIZE] challengeC,
+	#[public]      stack u8[CHALLENGE_P_SIZE] challengeP
+) -> reg u64
+{
+
+	reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] a;
+	reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] b;
+	reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] c;
+	reg ptr  u8[PNC_SALT_SIZE] d;
+	reg ptr u8[PNC_N_ROUNDS * MZD_SIZE] e;
+	reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] f;
+	reg ptr u8[CHALLENGE_C_SIZE] g;
+	reg ptr u8[CHALLENGE_P_SIZE] h;
+
+	a = seeds;
+	b = seeds_exists;
+	c = tapes;
+	d = saltAndRoot[0:PNC_SALT_SIZE];
+	e = inputs;
+	f = msgs;
+	g = challengeC;
+	h = challengeP;
+	sig = _assemble_proof(sig, a, b, c, d, e, f, g, h);
+
+	return sig;
+}
+
+inline
+fn __retrieveCommitments_(
+	stack u8[COMMITMENTS_FULL_SIZE] commitments,
+	stack u8[CHALLENGE_C_SIZE] challengeC,
+	stack u8[CHALLENGE_P_SIZE] challengeP,
+	stack u8[PROOFS_FULL_SIZE] proofs,
+	stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+	stack u8[TREE_NODES_2_SIZE] seeds,
+	stack u8[PNC_SALT_SIZE] salt,
+	reg 	u64 t round,
+	reg 	u16 round_u16,
+	reg		u64 proof_round
+) -> stack u8[COMMITMENTS_FULL_SIZE], stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE], reg u64
+{
+	reg ptr u8[TAPES_FULL_SIZE] a;
+
+	t *= TAPES_FULL_SIZE;
+	a = tapes[t:TAPES_FULL_SIZE];
+  () = #spill(t);
+
+	commitments, a, proof_round = 
+		__retrieveCommitments(
+						      commitments,
+						      challengeC,
+						      challengeP,
+							    proofs,
+							    a,
+							    seeds,
+							    salt,
+							    round,
+							    round_u16,
+							    proof_round
+						     );
+
+  () = #unspill(t);
+	tapes[t:TAPES_FULL_SIZE] = a;
+	
+	return commitments, tapes, proof_round;
+}
+

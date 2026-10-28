@@ -1,0 +1,660 @@
+require "params.jinc"
+require "lowmc_global_vars.jinc"
+require "bitstream.jinc"
+require "mzd_additional.jinc"
+
+
+inline 
+fn _picnic3_mpc_sbox_bitsliced(
+  stack u8[MZD_SIZE] statein,
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  reg ptr u8[MSGS_FULL_SIZE] msgs,
+  reg u64 pos_msgs pos_tapes,
+  reg u64 unopened
+) -> stack u8[MZD_SIZE], reg ptr u8[MSGS_FULL_SIZE]
+{
+
+  stack u8[MZD_SIZE] tmp;
+  stack u8[MZD_SIZE] a b c;
+  stack u8[MZD_SIZE] s_ab s_bc s_ca;
+  stack u8[MZD_SIZE] mask_a mask_b mask_c;
+  stack u8[MZD_SIZE] and_helper_ab and_helper_bc and_helper_ca;
+
+
+  reg u64 pos i;
+  #[mmy] reg u256 ymm0 ymm1 ymm2 ymm3 ymm4 ymm5 ymm6 ymm7 ymm8 ymm9 ymm10; 
+
+  stack u64 s_pos_msgs s_pos_tapes s_unopened s_i;
+
+  s_unopened = unopened;
+  s_pos_msgs = pos_msgs;
+  s_pos_tapes = pos_tapes;
+
+  ymm0 = statein[u256 0];
+  ymm1 = ymm0 & bitmask_a[u256 0];
+  ymm2 = ymm0 & bitmask_b[u256 0];
+  ymm3 = ymm0 & bitmask_c[u256 0];
+
+  ymm0 = #VPSRL_4u64(ymm1,62);
+  ymm1 = #VPSLL_4u64(ymm1,2);
+  ymm0 = #VPERMQ(ymm0, 147);
+  c[u256 0] = ymm3;
+  ymm4 = ymm1 | ymm0;
+
+  ymm5 = #VPSRL_4u64(ymm2,63);
+  ymm5 = #VPERMQ(ymm5, 147);
+  ymm2 = #VPSLL_4u64(ymm2,1);
+  a[u256 0] = ymm4;
+  ymm6 = ymm2 | ymm5;
+
+  ymm0 = ymm3 & ymm6;
+  ymm3 &= ymm4;
+  b[u256 0] = ymm6;
+  s_ca[u256 0] = ymm3;
+  ymm3 = ymm4 & ymm6;
+  s_bc[u256 0] = ymm0;
+  s_ab[u256 0] = ymm3;
+
+  i = 0;
+  while(i < 16)
+  {
+    s_i = i;
+    unopened = s_unopened;
+    if(unopened == i) 
+    { 
+
+      /* we are in verify, just grab the broadcast s from the msgs array */
+      pos = s_unopened;
+      pos *= PNC_VIEW_SIZE*8;
+      pos += s_pos_msgs;
+      tmp =  __mzd_from_bitstream_msgs(msgs, tmp, pos);
+
+      ymm0 = tmp[u256 0];
+      ymm1 = ymm0 & bitmask_a[u256 0];
+      ymm2 = ymm0 & bitmask_b[u256 0];
+      ymm3 = ymm0 & bitmask_c[u256 0];
+
+      ymm4 = #VPSRL_4u64(ymm1,62);
+      ymm0 = #VPSLL_4u64(ymm1,2);
+      ymm3 ^= s_ab[u256 0];
+      ymm1 =  #VPSRL_4u64(ymm2,63);
+      ymm2 = #VPSLL_4u64(ymm2,1);
+
+      ymm4 = #VPERMQ(ymm4, 147);
+      ymm1 = #VPERMQ(ymm1, 147);
+
+      ymm4 |= ymm0;
+      s_ab[u256 0] = ymm3;
+      ymm0 = ymm4 ^ s_ca[u256 0];
+      ymm1 |= ymm2;
+      ymm5 = ymm1 ^ s_bc[u256 0];
+      s_ca[u256 0] = ymm0;
+      s_bc[u256 0] = ymm5;
+    }
+    else {
+      /* make a mzd_local from tape[i] for input_masks */
+      pos = s_i;
+      pos *= TAPE_SIZE_BYTES * 8;
+      pos += s_pos_tapes;
+      tmp = __mzd_from_bitstream_tapes_verify(tapes, tmp, pos);
+
+      ymm0 = tmp[u256 0];
+      ymm2 = ymm0 & bitmask_a[u256 0];
+      ymm4 = ymm0 & bitmask_b[u256 0];
+      ymm0 = ymm0 & bitmask_c[u256 0];
+  
+      ymm1 = #VPSRL_4u64(ymm2,62);
+      ymm2 = #VPSLL_4u64(ymm2,2);
+      mask_c[u256 0] = ymm0;
+
+      ymm1 = #VPERMQ(ymm1, 147);
+      ymm2 |= ymm1;
+
+      ymm1 = #VPSRL_4u64(ymm4,63);
+      ymm1 = #VPERMQ(ymm1, 147);
+      ymm4 = #VPSLL_4u64(ymm4,1);
+      mask_a[u256 0] = ymm2;
+      ymm4 |= ymm1;
+      mask_b[u256 0] = ymm4;
+
+      /* make a mzd_local from tape[i] for and_helper; */
+
+      pos = s_i;
+      pos *= TAPE_SIZE_BYTES * 8;
+      pos += s_pos_tapes;
+      pos += LOWMC_N_BITS;
+      tmp = __mzd_from_bitstream_tapes_verify(tapes, tmp, pos);
+
+      ymm10 = b[u256 0];
+      ymm0 = a[u256 0];
+      ymm7 = tmp[u256 0];
+      ymm2 = mask_b[u256 0];
+      ymm1 = ymm7 & bitmask_b[u256 0];
+      ymm4 = mask_a[u256 0];
+      ymm5 = ymm7 & bitmask_a[u256 0];
+      ymm7 &= bitmask_c[u256 0];
+
+      and_helper_ab[u256 0] = ymm7;
+
+
+      /* s_ab */
+
+      ymm3 = ymm0 & ymm2;
+      ymm9 = #VPSRL_4u64(ymm1,63);
+      ymm6 = #VPSLL_4u64(ymm1,1);
+      ymm1 = ymm10 & ymm4;
+
+      ymm8 = #VPSRL_4u64(ymm5,62);
+      ymm9 = #VPERMQ(ymm9, 147);
+      ymm3 ^= ymm1;
+
+      ymm6 |= ymm9;
+      ymm8 = #VPERMQ(ymm8, 147);
+      ymm3 ^= ymm7;
+      tmp[u256 0] = ymm3;
+
+      ymm5 = #VPSLL_4u64(ymm5,2);
+      ymm7 = ymm3 ^ s_ab[u256 0];
+      
+      ymm5 |= ymm8;
+      and_helper_bc[u256 0] = ymm6;
+      and_helper_ca[u256 0] = ymm5;
+
+      s_ab[u256 0] = ymm7;
+
+      /* s_bc & s_ca */
+
+      ymm7 = ymm0;            // ymm7 = a
+      ymm0 = mask_c[u256 0];  // ymm0 = mask_c
+      ymm1 = ymm7 & ymm0;     // ymm1 = t1(ca) = a & mask_c
+      ymm0 &= ymm10;          // ymm0 = t0(bc) = mask_c & b
+      ymm1 ^= ymm5;           // ymmm1 ^= and_helper_ca
+      ymm5 = c[u256 0];       // ymm5 = c;
+      ymm0 ^= ymm6;           // ymm0 = t0 ^ and_helper_bc
+      ymm4 &= ymm5;           // ymm4 = t0(ca) = mask_a & c;
+      ymm2 &= ymm5;           // ymm2 = mask_b & c
+      ymm1 ^= ymm4;           // ymm1 = t1(ca) ^ t0(ca);
+      ymm0 ^= ymm2;           // ymm0 = t0 ^ t1       
+      ymm7 = ymm1 ^ s_ca[u256 0]; // ymm7 = (t0(ca) ^ t1(ca)) ^ s_ca
+
+      ymm4 = #VPSLL_4u64(ymm1,62);
+      ymm2 = #VPSLL_4u64(ymm0,63);
+      ymm6 = ymm0 ^ s_bc[u256 0];
+      ymm4 = #VPERMQ(ymm4, 57);
+      ymm1 = #VPSRL_4u64(ymm1,2);
+      ymm2 = #VPERMQ(ymm2, 57);
+      s_bc[u256 0] = ymm6;            
+      ymm0 = #VPSRL_4u64(ymm0,1);
+      ymm1 |= ymm4;             // ymm1 = (t0(ca) << 62) | (t0(ca) >> 2)
+      s_ca[u256 0] = ymm7;    
+      ymm0 |= ymm2;             // ymm1 = (t0(ca) << 63) | (t0(ca) >> 1)
+      ymm0 ^= tmp[u256 0];
+      ymm0 ^= ymm1;
+      tmp[u256 0] = ymm0;
+
+      pos = s_i;
+      pos *= PNC_VIEW_SIZE * 8;
+      pos += s_pos_msgs;
+      msgs = __mzd_to_bitstream_msgs(msgs, tmp, pos);
+    }
+
+    i = s_i;
+    i += 1;
+  }
+
+  ymm3 = a[u256 0];
+  ymm2 = ymm3 ^ b[u256 0];
+  ymm1 = ymm3 ^ s_bc[u256 0];
+  ymm0 = ymm2 ^ s_ca[u256 0];
+  ymm3 = #VPSLL_4u64(ymm1,62);
+  ymm1 = #VPSRL_4u64(ymm1,2);
+  ymm4 = #VPSLL_4u64(ymm0,63);
+  ymm0 = #VPSRL_4u64(ymm0,1);
+
+  ymm3 = #VPERMQ(ymm3, 57);
+  ymm4 = #VPERMQ(ymm4, 57);
+  ymm1 |= ymm3;
+  ymm0 |= ymm4;
+  ymm0 ^= ymm1;
+  ymm3 = ymm2 ^ c[u256 0];
+  ymm0 ^= ymm3;
+  ymm0 ^= s_ab[u256 0];
+  statein[u256 0] = ymm0;
+
+  return statein, msgs;
+}
+
+inline fn __picnic3_mpc_sbox_bitsliced(
+  stack u8[MZD_SIZE] statein,
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  reg ptr u8[MSGS_FULL_SIZE] msgs,
+  reg u64 pos_msgs pos_tapes,
+  reg u64 unopened
+) -> stack u8[MZD_SIZE], reg ptr u8[MSGS_FULL_SIZE]
+{
+  reg ptr u8[MZD_SIZE] a;
+
+  a = statein;
+  a, msgs = _picnic3_mpc_sbox_bitsliced(a, tapes, msgs, pos_msgs, pos_tapes, unopened); 
+  statein = a;
+
+  return statein, msgs;
+}
+
+
+#[returnaddress="stack"]
+fn _simulateOnline(
+  reg ptr u8[MZD_SIZE] _maskedKey,
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  reg ptr u8[MSGS_FULL_SIZE] msgs,
+  reg ptr u8[MZD_SIZE] _plaintext,
+  reg u64 msgs_offset tapes_offset unopened
+) -> reg ptr u8[MSGS_FULL_SIZE]
+{
+  reg u64 pos_msgs pos_tapes;
+  #[ymm0] reg u256 ymm0 ymm1;
+
+  stack u64 s_msgs_offset s_tapes_offset s_unopened;
+
+  stack u8[MZD_SIZE] temp state s_maskedKey;
+  
+  stack ptr u8[MZD_SIZE] tmp;
+
+  reg ptr u8[MZD_SIZE] maskedKey reg_temp reg_state;
+
+  inline int r;
+
+  tapes_offset <<= 3;
+  s_tapes_offset = tapes_offset;
+  s_msgs_offset = msgs_offset;   // msg offset is 0 so no need to set as bits
+  s_unopened = unopened;
+
+  ymm1 = _maskedKey[u256 0];
+  ymm0 = #set0_256();
+  s_maskedKey[u256 0] = ymm1;
+  
+  temp[u256 0] = ymm0;
+  reg_temp = temp;
+  reg_state = state;
+  reg_temp = _mzd_addmul_v_uint64_256(reg_temp, _maskedKey, k_matrix[0:MATRIX_ROUND]);
+  reg_state = _mzd_xor_uint64_block(reg_state, reg_temp, _plaintext);
+  state = reg_state;
+  temp = reg_temp;
+
+  for r=0 to LOWMC_R
+  {
+    pos_msgs = s_msgs_offset;
+    pos_msgs += LOWMC_N_BITS * r;
+    pos_tapes = s_tapes_offset;
+    pos_tapes += LOWMC_N_BITS * 2 * r;
+
+    tmp = maskedKey;
+    unopened = s_unopened;
+    state, msgs = __picnic3_mpc_sbox_bitsliced(state, tapes, msgs, pos_msgs, pos_tapes, unopened);
+
+    temp[u256 0] = ymm0;
+    reg_temp = temp;
+    reg_state = state;
+    reg_temp = _mzd_addmul_v_uint64_256(reg_temp, reg_state, l_matrix[MATRIX_ROUND * r : MATRIX_ROUND]);
+    temp = reg_temp;
+
+    state = __mzd_xor_uint64_block(state, temp, r_c[MZD_SIZE * r : MZD_SIZE]);
+
+    maskedKey = s_maskedKey;
+    state = __mzd_addmul_v_uint64_256_v2(state, maskedKey, k_matrix[MATRIX_ROUND * (r + 1) : MATRIX_ROUND]);
+  }  
+
+  return msgs;
+}
+
+inline fn __simulateOnline(
+  stack u8[MZD_SIZE] maskedKey,
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  stack u8[MSGS_FULL_SIZE] msgs,
+  stack u8[MZD_SIZE] plaintext,
+  reg u64 msgs_offset tapes_offset unopened
+) -> stack u8[MSGS_FULL_SIZE]
+{
+  reg ptr u8[MZD_SIZE] a;
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] b;
+  reg ptr u8[MSGS_FULL_SIZE] c;
+  reg ptr u8[MZD_SIZE] d;
+
+  a = maskedKey;
+  b = tapes;
+  c = msgs;
+  d = plaintext;
+  msgs_offset = msgs_offset;
+  tapes_offset = tapes_offset;
+  unopened = unopened;
+  c = _simulateOnline(a, b, c, d, msgs_offset, tapes_offset, unopened);
+  msgs = c;
+
+  return msgs;
+}
+
+inline 
+fn _picnic3_mpc_sbox_bitsliced2(
+  stack u8[MZD_SIZE] statein,
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+  reg u64 pos_msgs pos_tapes,
+  reg u64 unopened
+) -> stack u8[MZD_SIZE], reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+
+  stack u8[MZD_SIZE] tmp;
+  stack u8[MZD_SIZE] a b c;
+  stack u8[MZD_SIZE] s_ab s_bc s_ca;
+  stack u8[MZD_SIZE] mask_a mask_b mask_c;
+  stack u8[MZD_SIZE] and_helper_ab and_helper_bc and_helper_ca;
+
+
+  reg u64 pos i;
+  #[mmy] reg u256 ymm0 ymm1 ymm2 ymm3 ymm4 ymm5 ymm6 ymm7 ymm8 ymm9 ymm10;
+
+
+  stack u64 s_pos_msgs s_pos_tapes s_unopened s_i;
+
+  s_unopened = unopened;
+  s_pos_msgs = pos_msgs;
+  s_pos_tapes = pos_tapes;
+
+  ymm0 = statein[u256 0];
+  ymm1 = ymm0 & bitmask_a[u256 0];
+  ymm2 = ymm0 & bitmask_b[u256 0];
+  ymm3 = ymm0 & bitmask_c[u256 0];
+
+  ymm0 = #VPSRL_4u64(ymm1,62);
+  ymm1 = #VPSLL_4u64(ymm1,2);
+  ymm0 = #VPERMQ(ymm0, 147);
+  c[u256 0] = ymm3;
+  ymm4 = ymm1 | ymm0;
+
+  ymm5 = #VPSRL_4u64(ymm2,63);
+  ymm5 = #VPERMQ(ymm5, 147);
+  ymm2 = #VPSLL_4u64(ymm2,1);
+  a[u256 0] = ymm4;
+  ymm6 = ymm2 | ymm5;
+
+  ymm0 = ymm3 & ymm6;
+  ymm3 &= ymm4;
+  b[u256 0] = ymm6;
+  s_ca[u256 0] = ymm3;
+  ymm3 = ymm4 & ymm6;
+  s_bc[u256 0] = ymm0;
+  s_ab[u256 0] = ymm3;
+
+  i = 0;
+  while(i < 16)
+  {
+    s_i = i;
+    unopened = s_unopened;
+    if(unopened == i) 
+    { 
+
+      /* we are in verify, just grab the broadcast s from the msgs array */
+      pos = s_unopened;
+      pos *= PNC_VIEW_SIZE*8;
+      pos += s_pos_msgs;
+      tmp =  __mzd_from_bitstream_msgs2(msgs, tmp, pos);
+
+      ymm0 = tmp[u256 0];
+      ymm1 = ymm0 & bitmask_a[u256 0];
+      ymm2 = ymm0 & bitmask_b[u256 0];
+      ymm3 = ymm0 & bitmask_c[u256 0];
+
+      ymm4 = #VPSRL_4u64(ymm1,62);
+      ymm0 = #VPSLL_4u64(ymm1,2);
+      ymm3 ^= s_ab[u256 0];
+      ymm1 =  #VPSRL_4u64(ymm2,63);
+      ymm2 = #VPSLL_4u64(ymm2,1);
+
+      ymm4 = #VPERMQ(ymm4, 147);
+      ymm1 = #VPERMQ(ymm1, 147);
+
+      ymm4 |= ymm0;
+      s_ab[u256 0] = ymm3;
+      ymm0 = ymm4 ^ s_ca[u256 0];
+      ymm1 |= ymm2;
+      ymm5 = ymm1 ^ s_bc[u256 0];
+      s_ca[u256 0] = ymm0;
+      s_bc[u256 0] = ymm5;
+    }
+    else {
+      /* make a mzd_local from tape[i] for input_masks */
+      pos = s_i;
+      pos *= TAPE_SIZE_BYTES * 8;
+      pos += s_pos_tapes;
+      tmp = __mzd_from_bitstream_tapes_verify(tapes, tmp, pos); /* CHANGE FOR NORMAL ONE  AND TEST !!! */
+
+      ymm0 = tmp[u256 0];
+      ymm2 = ymm0 & bitmask_a[u256 0];
+      ymm4 = ymm0 & bitmask_b[u256 0];
+      ymm0 = ymm0 & bitmask_c[u256 0];
+  
+      ymm1 = #VPSRL_4u64(ymm2,62);
+      ymm2 = #VPSLL_4u64(ymm2,2);
+      mask_c[u256 0] = ymm0;
+
+      ymm1 = #VPERMQ(ymm1, 147);
+      ymm2 |= ymm1;
+
+      ymm1 = #VPSRL_4u64(ymm4,63);
+      ymm1 = #VPERMQ(ymm1, 147);
+      ymm4 = #VPSLL_4u64(ymm4,1);
+      mask_a[u256 0] = ymm2;
+      ymm4 |= ymm1;
+      mask_b[u256 0] = ymm4;
+
+
+      /* make a mzd_local from tape[i] for and_helper; */
+
+      pos = s_i;
+      pos *= TAPE_SIZE_BYTES * 8;
+      pos += s_pos_tapes;
+      pos += LOWMC_N_BITS;
+      tmp = __mzd_from_bitstream_tapes_verify(tapes, tmp, pos);
+
+      ymm10 = b[u256 0];
+      ymm0 = a[u256 0];
+      ymm7 = tmp[u256 0];
+      ymm2 = mask_b[u256 0];
+      ymm1 = ymm7 & bitmask_b[u256 0];
+      ymm4 = mask_a[u256 0];
+      ymm5 = ymm7 & bitmask_a[u256 0];
+      ymm7 &= bitmask_c[u256 0];
+
+      and_helper_ab[u256 0] = ymm7;
+
+
+      /* s_ab */
+
+      ymm3 = ymm0 & ymm2;
+      ymm9 = #VPSRL_4u64(ymm1,63);
+      ymm6 = #VPSLL_4u64(ymm1,1);
+      ymm1 = ymm10 & ymm4;
+
+      ymm8 = #VPSRL_4u64(ymm5,62);
+      ymm9 = #VPERMQ(ymm9, 147);
+      ymm3 ^= ymm1;
+
+      ymm6 |= ymm9;
+      ymm8 = #VPERMQ(ymm8, 147);
+      ymm3 ^= ymm7;
+      tmp[u256 0] = ymm3;
+
+      ymm5 = #VPSLL_4u64(ymm5,2);
+      ymm7 = ymm3 ^ s_ab[u256 0];
+      
+      ymm5 |= ymm8;
+      and_helper_bc[u256 0] = ymm6;
+      and_helper_ca[u256 0] = ymm5;
+
+      s_ab[u256 0] = ymm7;
+
+      /* s_bc & s_ca */
+
+      ymm7 = ymm0;            // ymm7 = a
+      ymm0 = mask_c[u256 0];  // ymm0 = mask_c
+      ymm1 = ymm7 & ymm0;     // ymm1 = t1(ca) = a & mask_c
+      ymm0 &= ymm10;          // ymm0 = t0(bc) = mask_c & b
+      ymm1 ^= ymm5;           // ymmm1 ^= and_helper_ca
+      ymm5 = c[u256 0];       // ymm5 = c;
+      ymm0 ^= ymm6;           // ymm0 = t0 ^ and_helper_bc
+      ymm4 &= ymm5;           // ymm4 = t0(ca) = mask_a & c;
+      ymm2 &= ymm5;           // ymm2 = mask_b & c
+      ymm1 ^= ymm4;           // ymm1 = t1(ca) ^ t0(ca);
+      ymm0 ^= ymm2;           // ymm0 = t0 ^ t1       
+      ymm7 = ymm1 ^ s_ca[u256 0]; // ymm7 = (t0(ca) ^ t1(ca)) ^ s_ca
+
+      ymm4 = #VPSLL_4u64(ymm1,62);
+      ymm2 = #VPSLL_4u64(ymm0,63);
+      ymm6 = ymm0 ^ s_bc[u256 0];
+      ymm4 = #VPERMQ(ymm4, 57);
+      ymm1 = #VPSRL_4u64(ymm1,2);
+      ymm2 = #VPERMQ(ymm2, 57);
+      s_bc[u256 0] = ymm6;            
+      ymm0 = #VPSRL_4u64(ymm0,1);
+      ymm1 |= ymm4;             // ymm1 = (t0(ca) << 62) | (t0(ca) >> 2)
+      s_ca[u256 0] = ymm7;    
+      ymm0 |= ymm2;             // ymm1 = (t0(ca) << 63) | (t0(ca) >> 1)
+      ymm0 ^= tmp[u256 0];
+      ymm0 ^= ymm1;
+      tmp[u256 0] = ymm0;
+
+      pos = s_i;
+      pos *= PNC_VIEW_SIZE * 8;
+      pos += s_pos_msgs;
+      msgs = __mzd_to_bitstream_msgs2(msgs, tmp, pos);
+    }
+
+    i = s_i;
+    i += 1;
+  }
+
+  ymm3 = a[u256 0];
+  ymm2 = ymm3 ^ b[u256 0];
+  ymm1 = ymm3 ^ s_bc[u256 0];
+  ymm0 = ymm2 ^ s_ca[u256 0];
+  ymm3 = #VPSLL_4u64(ymm1,62);
+  ymm1 = #VPSRL_4u64(ymm1,2);
+  ymm4 = #VPSLL_4u64(ymm0,63);
+  ymm0 = #VPSRL_4u64(ymm0,1);
+
+  ymm3 = #VPERMQ(ymm3, 57);
+  ymm4 = #VPERMQ(ymm4, 57);
+  ymm1 |= ymm3;
+  ymm0 |= ymm4;
+  ymm0 ^= ymm1;
+  ymm3 = ymm2 ^ c[u256 0];
+  ymm0 ^= ymm3;
+  ymm0 ^= s_ab[u256 0];
+  statein[u256 0] = ymm0;
+
+  return statein, msgs;
+}
+
+inline fn __picnic3_mpc_sbox_bitsliced2(
+  stack u8[MZD_SIZE] statein,
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+  reg u64 pos_msgs pos_tapes,
+  reg u64 unopened
+) -> stack u8[MZD_SIZE], reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+  reg ptr u8[MZD_SIZE] a;
+
+  a = statein;
+  a, msgs = _picnic3_mpc_sbox_bitsliced2(a, tapes, msgs, pos_msgs, pos_tapes, unopened); 
+  statein = a;
+
+  return statein, msgs;
+}
+
+
+
+#[returnaddress="stack"]
+fn _simulateOnline2(
+  reg ptr u8[MZD_SIZE] _maskedKey,
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+  reg ptr u8[MZD_SIZE] _plaintext,
+  reg u64 msgs_offset tapes_offset unopened
+) -> reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+
+  reg u64 pos_msgs pos_tapes;
+  stack u64 s_msgs_offset s_tapes_offset s_unopened;
+
+  stack u8[MZD_SIZE] temp state s_maskedKey s_plaintext;
+  
+  stack ptr u8[MZD_SIZE] tmp;
+
+  reg ptr u8[MZD_SIZE] maskedKey;
+
+  inline int r;
+
+  /* Set offset from bytes to bits */
+  tapes_offset <<= 3;
+  s_tapes_offset = tapes_offset;
+  msgs_offset <<= 3;
+  s_msgs_offset = msgs_offset;
+  s_unopened = unopened;
+
+  s_maskedKey = __reg_to_stack_uint64_256(_maskedKey,s_maskedKey);
+  s_plaintext = __reg_to_stack_uint64_256(_plaintext,s_plaintext);
+
+  temp = __mzd_mul_v_uint64_256(temp, s_maskedKey, k_matrix[0:MATRIX_ROUND]);
+  state = __mzd_xor_uint64_block(state, temp, s_plaintext);
+
+
+  for r=0 to LOWMC_R
+  {
+    pos_msgs = s_msgs_offset;
+    pos_msgs += LOWMC_N_BITS * r;
+    pos_tapes = s_tapes_offset;
+    pos_tapes += LOWMC_N_BITS * 2 * r;
+
+    tmp = maskedKey;
+    unopened = s_unopened;
+    state, msgs = __picnic3_mpc_sbox_bitsliced2(state, tapes, msgs, pos_msgs, pos_tapes, unopened);
+
+    temp = __mzd_mul_v_uint64_256(temp, state, l_matrix[MATRIX_ROUND * r : MATRIX_ROUND]);
+
+    state = __mzd_xor_uint64_block(state, temp, r_c[MZD_SIZE * r : MZD_SIZE]);
+
+    maskedKey = s_maskedKey;
+    state = __mzd_addmul_v_uint64_256_v2(state, maskedKey, k_matrix[MATRIX_ROUND * (r + 1) : MATRIX_ROUND]);
+  }  
+
+  return msgs;
+}
+
+inline fn __simulateOnline2(
+  stack u8[MZD_SIZE] maskedKey,
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+  stack u8[MZD_SIZE] plaintext,
+  reg u64 msgs_offset tapes_offset unopened
+) -> stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+  reg ptr u8[MZD_SIZE] a;
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] b;
+  reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] c;
+  reg ptr u8[MZD_SIZE] d;
+
+  a = maskedKey;
+  b = tapes;
+  c = msgs;
+  d = plaintext;
+  msgs_offset = msgs_offset;
+  tapes_offset = tapes_offset;
+  unopened = unopened;
+  c = _simulateOnline2(a, b, c, d, msgs_offset, tapes_offset, unopened);
+  msgs = c;
+
+  return msgs;
+}
+
+

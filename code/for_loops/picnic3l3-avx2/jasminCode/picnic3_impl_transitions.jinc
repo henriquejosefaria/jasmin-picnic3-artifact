@@ -1,0 +1,253 @@
+require "picnic3_aux.jinc"
+require "noslice_copy.jinc"
+require "picnic3_impl.jinc"
+require "picnic3_impl_verify.jinc"
+
+inline
+fn __get_proofs_from_sig(
+  stack u8[PROOFS_FULL_SIZE] proofs, 
+  stack u8[CHALLENGE_C_SIZE] challengeC, 
+  stack u8[CHALLENGE_P_SIZE] challengeP, 
+  reg u64 sig,
+  reg u8 t8
+) -> stack u8[PROOFS_FULL_SIZE], reg u8
+{
+  reg u8 c;
+  reg u16 t16 P_index_u16;
+  reg u64 proof_idx P_index;
+
+  stack u16 s_t16;
+  stack u64 s_proof_idx s_sig;
+
+  s_sig = sig;
+
+  c = 0;
+  t16 = 0;
+  s_proof_idx = 0;
+  while(t16 < PNC_N_ROUNDS)
+  { 
+    c = __contains_challengeC_2(challengeC, t16);
+
+    if(c == 1)
+    { 
+      s_t16 = t16;
+      P_index = __indexOf(challengeC, t16);
+      P_index_u16 = challengeP[:u16 P_index];
+      s_t16 = t16;
+
+      proof_idx = s_proof_idx;
+      proof_idx *= PROOF_FULL_SIZE;
+      
+      sig = s_sig;
+      proofs, sig, t8 = _copy_proof_from_sig(proofs, sig, proof_idx, P_index_u16, t8);
+      s_sig = sig;
+
+      if(t8 == 1)
+      {
+        s_t16 = PNC_N_ROUNDS;
+      }
+
+      proof_idx = s_proof_idx;
+      proof_idx += 1;
+      s_proof_idx = proof_idx;
+
+      t16 = s_t16;
+    }
+
+    t16 += 1;
+  }
+
+  return proofs, t8;
+}
+
+inline
+fn __createRandomTapes(
+  #[secret] stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[secret] stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  #[secret] stack u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 t
+) -> stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg u64 idx1 idx2;
+  reg ptr u8[PNC_SALT_SIZE] c;
+  reg ptr u8[TAPES_FULL_SIZE] reg_tapes;
+  reg ptr u8[TREE_NODES_2_SIZE] reg_seeds;
+
+  stack u8[TAPES_FULL_SIZE] tmp_tapes;
+  stack u8[TREE_NODES_2_SIZE] tmp_seeds;
+
+  idx2 = t;
+  idx2 *= TREE_NODES_2_SIZE;
+  tmp_seeds = __ns_get_seeds2(seeds, tmp_seeds, idx2);
+  idx1 = t;
+  idx1 *= TAPES_FULL_SIZE;
+  tmp_tapes = __ns_get_tapes(tapes, tmp_tapes, idx1);
+  c = salt;
+  reg_seeds = tmp_seeds;
+  reg_tapes = tmp_tapes;
+  () = #spill(idx1);
+
+  reg_tapes = _createRandomTapes(reg_tapes, reg_seeds, c, t);
+  tmp_tapes = reg_tapes;
+
+  () = #unspill(idx1);
+  tapes = __ns_put_tapes(tapes, tmp_tapes, idx1);
+
+  return tapes;
+}
+
+inline
+fn __createRandomTapes_verify(
+  #[secret] stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[secret] stack u8[TREE_NODES_2_SIZE] seeds,
+  #[secret] stack u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 t
+) -> stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg u64 idx1;
+  reg ptr u8[PNC_SALT_SIZE] c;
+  reg ptr u8[TAPES_FULL_SIZE] reg_tapes;
+  reg ptr u8[TREE_NODES_2_SIZE] reg_seeds;
+
+  stack u8[TAPES_FULL_SIZE] tmp_tapes;
+
+  idx1 = t;
+  idx1 *= TAPES_FULL_SIZE;
+  tmp_tapes = __ns_get_tapes(tapes, tmp_tapes, idx1);
+  c = salt;
+  reg_seeds = seeds;
+  reg_tapes = tmp_tapes;
+  () = #spill(idx1);
+
+  reg_tapes = _createRandomTapes(reg_tapes,reg_seeds,c,t);
+  tmp_tapes = reg_tapes;
+
+  () = #unspill(idx1);
+  tapes = __ns_put_tapes(tapes, tmp_tapes, idx1);
+
+  return tapes;
+}
+
+inline
+fn __computeAuxTape(
+	#[secret] stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+	#[secret] stack u8[PNC_N_ROUNDS * MZD_SIZE] input_masks,
+	#[secret] stack u8[MZD_SIZE] privKey,
+	#[public] reg u64 pos
+) -> stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE], stack u8[PNC_N_ROUNDS * MZD_SIZE]
+{
+	reg u64 idx0 idx1;
+
+	reg ptr u8[TAPES_FULL_SIZE] a;
+	reg ptr u8[MZD_SIZE] b;	
+	reg ptr u8[MZD_SIZE] c;
+
+	stack u8[TAPES_FULL_SIZE] tmp_tapes;
+	stack u8[MZD_SIZE] tmp_mask;
+	stack u64 s_pos;
+
+	s_pos = pos;
+	idx0 = pos;
+	idx0 *= TAPES_FULL_SIZE;
+	tmp_tapes = __ns_get_tapes(tapes, tmp_tapes, idx0);
+	idx1 = s_pos;
+	idx1 *= MZD_SIZE;
+	tmp_mask = __ns_get_mzd(input_masks, tmp_mask, idx1);
+
+	a = tmp_tapes;
+	b = tmp_mask;
+	c = privKey;
+
+	a,b = _computeAuxTape(a,b,c);
+	tmp_tapes = a;
+	tmp_mask = b;
+
+	idx0 = s_pos;
+	idx0 *= TAPES_FULL_SIZE;
+	tapes = __ns_put_tapes(tapes, tmp_tapes, idx0);
+	idx1 = s_pos;
+	idx1 *= MZD_SIZE;
+	input_masks = __ns_put_mzd(input_masks, tmp_mask, idx1);
+
+	return tapes, input_masks;
+}
+
+inline fn __assemble_proof(
+	#[public]      reg u64 sig,
+	#[poly=seeds]  stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+	#[public]      stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] seeds_exists,
+	#[poly=tapes]  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[poly=_salt]  stack u8[PNC_SALT_AND_ROOT_LENGTH] saltAndRoot,
+	#[poly=inputs] stack u8[PNC_N_ROUNDS * MZD_SIZE] inputs,
+	#[poly=msgs]   stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+	#[public]      stack u8[CHALLENGE_C_SIZE] challengeC,
+	#[public]      stack u8[CHALLENGE_P_SIZE] challengeP
+) -> reg u64
+{
+
+	reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] a;
+	reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] b;
+	reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] c;
+	reg ptr u8[PNC_SALT_SIZE] d;
+	reg ptr u8[PNC_N_ROUNDS * MZD_SIZE] e;
+	reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] f;
+	reg ptr u8[CHALLENGE_C_SIZE] g;
+	reg ptr u8[CHALLENGE_P_SIZE] h;
+
+	a = seeds;
+	b = seeds_exists;
+	c = tapes;
+	d = saltAndRoot[0:PNC_SALT_SIZE];
+	e = inputs;
+	f = msgs;
+	g = challengeC;
+	h = challengeP;
+	sig = _assemble_proof(sig, a, b, c, d, e, f, g, h);
+
+	return sig;
+}
+
+inline
+fn __retrieveCommitments_(
+	stack u8[COMMITMENTS_FULL_SIZE] commitments,
+	stack u8[CHALLENGE_C_SIZE] challengeC,
+	stack u8[CHALLENGE_P_SIZE] challengeP,
+	stack u8[PROOFS_FULL_SIZE] proofs,
+	stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+	stack u8[TREE_NODES_2_SIZE] seeds,
+	stack u8[PNC_SALT_SIZE] salt,
+	reg 	u64 t round,
+	reg 	u16 round_u16,
+	reg		u64 proof_round
+) -> stack u8[COMMITMENTS_FULL_SIZE], stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE], reg u64
+{
+	
+	reg ptr u8[TAPES_FULL_SIZE] a;
+
+	stack u8[TAPES_FULL_SIZE] tmp_tapes;
+
+	t *= TAPES_FULL_SIZE;
+	tmp_tapes = __ns_get_tapes(tapes, tmp_tapes, t);
+	a = tmp_tapes;
+  () = #spill(t);
+
+	commitments, a, proof_round = 
+		__retrieveCommitments(
+						      commitments,
+						      challengeC,
+						      challengeP,
+							    proofs,
+							    a,
+							    seeds,
+							    salt,
+							    round,
+							    round_u16,
+							    proof_round
+						     );
+
+	tmp_tapes = a;
+  () = #unspill(t);
+	tapes = __ns_put_tapes(tapes, tmp_tapes, t);
+	
+	return commitments, tapes, proof_round;
+}

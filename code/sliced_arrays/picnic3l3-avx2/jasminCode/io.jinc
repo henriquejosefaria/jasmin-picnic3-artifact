@@ -1,0 +1,132 @@
+require "params.jinc"
+
+
+fn _mzd_from_char_array(
+	#[poly=data] reg mut ptr u8[MZD_SIZE] result,
+	#[poly=data] reg ptr u8[MZD_SIZE] data
+) -> reg ptr u8[MZD_SIZE]
+{
+
+	reg u64 tmp;
+
+	tmp = data.[:u64 16];
+	tmp = #BSWAP_64(tmp);
+	result.[:u64 0] = tmp;
+
+	tmp = data.[:u64 8];
+	tmp = #BSWAP_64(tmp);
+	result.[:u64 8] = tmp;
+
+	tmp = data.[:u64 0];
+	tmp = #BSWAP_64(tmp);
+	result.[:u64 16] = tmp;
+
+	return result;
+}
+
+inline 
+fn __mzd_from_char_array(
+	#[poly=data] stack u8[MZD_SIZE] result,
+	#[poly=data] stack u8[MZD_SIZE] data
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a b;
+
+	a = result;
+	b = data;
+	a = _mzd_from_char_array(a,b);
+	result = a;
+
+	return result;
+}
+
+fn __mzd_to_char_array(
+	#[poly=data] reg mut ptr u8[PNC_N_ROUNDS * MZD_SIZE] dst,
+	#[poly=data] reg ptr u8[MZD_SIZE] data,
+	#[public]    reg u64 pos
+) -> reg ptr u8[PNC_N_ROUNDS * MZD_SIZE]
+{
+	reg u64 tmp;
+
+
+	tmp = data[:u64 2];
+	tmp = #BSWAP_64(tmp);
+	dst.[:u64 0 + (uint)pos] = tmp;
+
+	tmp = data[:u64 1];
+	tmp = #BSWAP_64(tmp);
+	dst.[:u64 8 + (uint)pos] = tmp;
+
+	tmp = data[:u64 0];
+	tmp = #BSWAP_64(tmp);
+	dst.[:u64 16 + (uint)pos] = tmp;
+
+	return dst;
+}
+
+inline 
+fn __masked_mzd_from_char_array(
+	#[poly=data] stack u8[MZD_SIZE] result,
+	#[poly=data] stack u8[PNC_N_ROUNDS * MZD_SIZE] data,
+	#[public] reg u64 pos
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+	reg ptr u8[MZD_SIZE] b;
+
+	pos *= MZD_SIZE;
+	b = data[pos: MZD_SIZE];
+
+	a = result;
+	a = _mzd_from_char_array(a, b);
+	result = a;
+
+	return result;
+}
+
+fn __masked_mzd_to_char_array(
+	#[poly=data] reg mut ptr u8[MZD_SIZE] dst,
+	#[poly=data] reg ptr u8[MZD_SIZE] data,
+	#[poly=data] reg ptr u8[MZD_SIZE] privKey
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 tmp aux idx pos;
+
+	pos = 0;
+	dst.[:u64 pos + 24] = 0; // set last u64 word to 0
+
+	idx = MZD_SIZE - 16;
+	while(idx > 0)
+	{
+		
+		tmp = data.[:u64 idx];
+		tmp = #BSWAP(tmp);
+
+		aux = MZD_SIZE - 16;
+		aux -= idx;
+		aux = privKey.[:u64 aux];
+		
+		aux ^= tmp;
+		dst.[:u64 pos] = aux;
+
+		pos += 8;
+		idx -= 8;
+	}
+
+	tmp = data.[:u64 idx];
+	tmp = #BSWAP(tmp);
+
+	aux = MZD_SIZE - 16;
+	aux -= idx;
+	aux = privKey.[:u64 aux];
+	
+	aux ^= tmp;
+	dst.[:u64 pos] = aux;
+
+	return dst;
+}
+
+
+
+
+

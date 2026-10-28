@@ -1,0 +1,24 @@
+[general]
+timeout = 30
+
+provers = Z3
+
+idirs = .
+idirs = CryptoSpecs:crypto-specs/common
+rdirs = CryptoSpecs:crypto-specs/fips202
+
+rdirs = Jasmin:jasmin-compiler/eclib
+
+idirs = Extraction:extraction
+idirs = Extraction:new_extraction
+
+idirs = Keccak:formosa-keccak/proof/amd64/common
+idirs = Keccak:formosa-keccak/proof/amd64/ref
+idirs = Keccak:formosa-keccak/proof/amd64/avx2
+
+idirs = JazzEC:formosa-keccak/proof/amd64/extracted
+idirs = JazzEC:crypto-specs/arrays
+idirs = JazzEC:extraction
+
+idirs = Spec:new_extraction
+idirs = Spec:spec

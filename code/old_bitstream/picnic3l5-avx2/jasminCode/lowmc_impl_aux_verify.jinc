@@ -1,0 +1,314 @@
+require "params.jinc"
+require "mzd_additional.jinc"
+require "lowmc_global_vars.jinc"
+require "bitstream.jinc"
+require "lowmc.jinc"
+
+
+
+/*
+  * COPY    => __mzd_copy_uint64_256()
+  * MUL     => __mzd_mul_v_uint64_256()
+  * ADDMUL  => __mzd_mul_v_uint64_256() 
+  * XOR     => __mzd_xor_uint64_block()
+*/
+#[returnaddress="stack"]
+fn __lowmc_aux_impl_verify(
+  #[secret] reg ptr u8[MZD_SIZE] lowmc_key,
+  #[secret] reg ptr u8[TAPES_FULL_SIZE] tapes
+) -> reg ptr u8[MZD_SIZE], reg ptr u8[TAPES_FULL_SIZE]
+{
+  
+  inline int r;
+
+  stack u8[MZD_SIZE] x y key0 tmp;
+
+  reg u64 pos tapes_pos tapes_aux_pos;
+  reg u256 t;
+
+  stack ptr u8[MZD_SIZE] s_lowmc_key;
+  stack ptr u8[TAPES_FULL_SIZE] s_tapes;
+
+  reg ptr u8[MZD_SIZE] reg_mzd;
+
+  s_lowmc_key = lowmc_key;
+  s_tapes = tapes;
+
+  t = #set0_256();
+  x[u256 0] = t;
+
+  reg_mzd = key0;
+  lowmc_key = s_lowmc_key;
+  reg_mzd = _mzd_copy_uint64_256(reg_mzd, lowmc_key);
+  lowmc_key = s_lowmc_key;
+  key0 = reg_mzd;
+
+  reg_mzd = tmp;
+  reg_mzd = _mzd_copy_uint64_256(reg_mzd, lowmc_key);
+  tmp = reg_mzd;
+
+  tmp = __mzd_mul_v_uint64_256(tmp, key0, ki_matrix);
+
+  
+  lowmc_key = s_lowmc_key;
+  reg_mzd = tmp;
+  lowmc_key = _mzd_copy_uint64_256(lowmc_key, reg_mzd);
+  s_lowmc_key = lowmc_key;
+
+
+  for r=0 to LOWMC_R 
+  {
+      reg_mzd = tmp;
+      lowmc_key = s_lowmc_key;
+      reg_mzd = _mzd_copy_uint64_256(reg_mzd, lowmc_key);
+      s_lowmc_key = lowmc_key;
+      tmp = reg_mzd;
+      
+      x = __mzd_addmul_v_uint64_256(x, tmp, k_matrix[(LOWMC_R - r) * MATRIX_ROUND : MATRIX_ROUND]);
+
+      y = __mzd_mul_v_uint64_256( y, x, li_matrix[(3-r) * MATRIX_ROUND : MATRIX_ROUND]);
+
+      // recover input masks from tapes, only in first round we use the key as input
+      if(r == (LOWMC_R - 1))
+      {
+        x = __mzd_copy_uint64_256(x, key0);
+
+      } else {
+
+        pos = LOWMC_N_BITS * 2 * (LOWMC_R - 1 - r) + TAPE_PARITY_TAPE_IDX * 8;
+        tapes = s_tapes;
+        t = #set0_256();
+        x[u256 0] = t;
+        x = __mzd_from_bitstream_tapes(tapes, x, pos);
+      }
+
+      tapes_pos = LOWMC_N_BITS * 2 * (LOWMC_R - 1 - r) + LOWMC_N_BITS;
+      tapes_aux_pos = LOWMC_N_BITS * (LOWMC_R - 1 - r);
+
+      tapes = s_tapes;
+      tapes = __picnic3_aux_sbox_bitsliced(x, y, tapes, tapes_pos, tapes_aux_pos);
+      s_tapes = tapes;
+  }
+  
+  lowmc_key = s_lowmc_key;
+  return lowmc_key, tapes;
+}
+
+
+#[returnaddress="stack"]
+fn _picnic3_aux_sbox_bitsliced2(
+  #[secret] reg ptr u8[MZD_SIZE] statein stateout,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[public] reg u64 tapes_pos tapes_aux_pos
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg u64 count;
+
+  stack u8[MZD_SIZE] s_statein s_stateout;
+  stack u8[MZD_SIZE] tmp;
+  stack u8[MZD_SIZE] a b c;
+  stack u8[MZD_SIZE] d e f;
+  stack u8[MZD_SIZE] fresh_output_ab fresh_output_bc fresh_output_ca;
+  stack u8[MZD_SIZE] t0 t1 t2 aux;
+
+  stack u64 s_tapes_aux_pos;
+
+  s_tapes_aux_pos = tapes_aux_pos;
+  s_statein = __reg_to_stack_uint64_256(statein, s_statein);
+  s_stateout = __reg_to_stack_uint64_256(stateout, s_stateout);
+
+  tmp = __mzd_copy_uint64_256(tmp, s_statein);
+  a = __mzd_and_uint64_block(a, bitmask_a, tmp);
+  b = __mzd_and_uint64_block(b, bitmask_b, tmp);
+  c = __mzd_and_uint64_block(c, bitmask_c, tmp);
+
+
+  tmp = __mzd_copy_uint64_256(tmp, a);
+  a  = __mzd_shift2_left_uint64_256(a, tmp);
+
+  tmp = __mzd_copy_uint64_256(tmp, b);
+  b  = __mzd_shift1_left_uint64_256(b, tmp);
+
+  
+  tmp = __mzd_copy_uint64_256(tmp, s_stateout);
+  d = __mzd_and_uint64_block(d, bitmask_a, tmp);
+  e = __mzd_and_uint64_block(e, bitmask_b, tmp);
+  f = __mzd_and_uint64_block(f, bitmask_c, tmp);
+
+
+  tmp = __mzd_copy_uint64_256(tmp, d);
+  d  = __mzd_shift2_left_uint64_256(d, tmp);
+
+  tmp = __mzd_copy_uint64_256(tmp, e);
+  e  = __mzd_shift1_left_uint64_256(e, tmp);
+
+
+  fresh_output_ab = __mzd_xor_uint64_block(fresh_output_ab, a, b);
+
+  fresh_output_ca = __mzd_xor_uint64_block(fresh_output_ca, e, fresh_output_ab);
+  fresh_output_bc = __mzd_xor_uint64_block(fresh_output_bc, d, a);
+  tmp = __mzd_copy_uint64_256(tmp, fresh_output_ab); 
+  fresh_output_ab = __mzd_xor_uint64_block(fresh_output_ab, tmp, c);
+  tmp = __mzd_copy_uint64_256(tmp, fresh_output_ab);
+  fresh_output_ab = __mzd_xor_uint64_block(fresh_output_ab, tmp, f);
+  
+
+  t2 = __mzd_shift2_right_uint64_256(t2, fresh_output_ca);
+  t1 = __mzd_shift1_right_uint64_256(t1, fresh_output_bc);
+
+  tmp = __mzd_copy_uint64_256(tmp, t2);
+  t2 = __mzd_xor_uint64_block( t2, tmp, t1);
+  aux = __mzd_xor_uint64_block( aux, t2, fresh_output_ab);
+
+
+  /* a & b */
+  t0 = __mzd_and_uint64_block(t0, a, b);
+  /* b & c */
+  t1  = __mzd_and_uint64_block(t1, b, c);
+  /* c & a */
+  t2 = __mzd_and_uint64_block(t2, c, a);
+
+
+  tmp = __mzd_copy_uint64_256(tmp, t2);
+  t2 = __mzd_shift2_right_uint64_256(t2, tmp);
+  tmp = __mzd_copy_uint64_256(tmp, t1);
+  t1 = __mzd_shift1_right_uint64_256(t1, tmp);
+
+  tmp = __mzd_copy_uint64_256(tmp, t2);
+  t2 = __mzd_xor_uint64_block(t2, tmp, t1);
+  tmp = __mzd_copy_uint64_256(tmp, t2);
+  t2 = __mzd_xor_uint64_block(t2, tmp, t0);
+  tmp = __mzd_copy_uint64_256(tmp, aux);
+  aux = __mzd_xor_uint64_block(aux, tmp, t2);
+
+
+  // Get bytes from: parity_tapes & last_party_tape
+
+  count = tapes_pos;
+  count += TAPE_PARITY_TAPE_IDX * 8;
+  t0 = __mzd_from_bitstream_tapes2(tapes, t0, count);
+
+  tmp = __mzd_copy_uint64_256(tmp, aux);
+  aux = __mzd_xor_uint64_block(aux, tmp, t0);
+
+  count = tapes_pos;
+  count += 15 * TAPE_SIZE_BYTES * 8;
+  t1 = __mzd_from_bitstream_tapes2(tapes, t1, count);
+
+  tmp = __mzd_copy_uint64_256(tmp, aux);
+  aux = __mzd_xor_uint64_block(aux, tmp, t1);
+
+  //Set bytes on: last_party_tape & aux_tape
+
+  count = tapes_pos;
+  count += 15 * TAPE_SIZE_BYTES * 8;
+
+  tapes = __mzd_to_bitstream_tapes2(tapes, aux, count);
+
+  count = s_tapes_aux_pos;
+  count += TAPE_AUX_IDX * 8;
+
+  tapes = __mzd_to_bitstream_tapes2(tapes, aux, count);
+
+  return tapes;
+}
+
+inline fn __picnic3_aux_sbox_bitsliced2(
+  stack u8[MZD_SIZE] statein stateout,
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  reg   u64 tapes_pos tapes_aux_pos
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg ptr u8[MZD_SIZE] a b;
+
+  a = statein;
+  b = stateout;
+  tapes = _picnic3_aux_sbox_bitsliced2(a,b,tapes,tapes_pos, tapes_aux_pos);
+
+  return tapes;
+}
+
+#[returnaddress="stack"]
+fn __lowmc_aux_impl_verify2(
+  #[secret] reg ptr u8[MZD_SIZE] lowmc_key,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[public]           reg u64 tapes_base
+) -> reg ptr u8[MZD_SIZE], reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  
+  inline int r;
+
+  stack u8[MZD_SIZE] x y key0;
+
+  reg u64 pos tapes_pos tapes_aux_pos;
+  reg u256 t;
+
+  stack u64 s_tapes_base;
+
+  stack ptr u8[MZD_SIZE] s_lowmc_key;
+  stack ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] s_tapes;
+
+  reg ptr u8[MZD_SIZE] reg_mzd;
+  reg ptr u64[MATRIX_ROUND] c;
+
+
+  s_tapes_base = tapes_base;
+  s_lowmc_key = lowmc_key;
+  s_tapes = tapes;
+
+  t = #set0_256();
+  x[u256 0] = t;
+
+  reg_mzd = key0;
+  lowmc_key = s_lowmc_key;
+  reg_mzd = _mzd_copy_uint64_256(reg_mzd, lowmc_key);
+  lowmc_key = s_lowmc_key;
+  key0 = reg_mzd;
+
+  lowmc_key[u64 0] = 0;
+  lowmc_key[u64 1] = 0;
+  lowmc_key[u64 2] = 0;
+  lowmc_key[u64 3] = 0;
+
+  c = ki_matrix;
+  lowmc_key = lowmc_key;
+  lowmc_key = _mzd_addmul_v_uint64_256(lowmc_key, reg_mzd, c);
+  s_lowmc_key = lowmc_key;
+
+  for r=0 to LOWMC_R 
+  {
+
+      lowmc_key = s_lowmc_key;
+      c = k_matrix[(LOWMC_R - r) * MATRIX_ROUND : MATRIX_ROUND];
+      x = _mzd_addmul_v_uint64_256(x, lowmc_key, c);
+
+      y = __mzd_mul_v_uint64_256( y, x, li_matrix[(3-r) * MATRIX_ROUND : MATRIX_ROUND]);
+
+      // recover input masks from tapes, only in first round we use the key as input
+      if(r == (LOWMC_R - 1))
+      {
+        x = __mzd_copy_uint64_256(x, key0);
+
+      } else {
+        pos = s_tapes_base;
+        pos += LOWMC_N_BITS * 2 * (LOWMC_R - 1 - r) + TAPE_PARITY_TAPE_IDX * 8;
+        tapes = s_tapes;
+        t = #set0_256();
+        x[u256 0] = t;
+        x = __mzd_from_bitstream_tapes2(tapes, x, pos);
+      }
+
+      tapes_pos = s_tapes_base;
+      tapes_aux_pos = tapes_pos;
+      tapes_pos += LOWMC_N_BITS * 2 * (LOWMC_R - 1 - r) + LOWMC_N_BITS;
+      tapes_aux_pos += LOWMC_N_BITS * (LOWMC_R - 1 - r);
+
+      tapes = s_tapes;
+      tapes = __picnic3_aux_sbox_bitsliced2(x, y, tapes, tapes_pos, tapes_aux_pos);
+      s_tapes = tapes;
+
+  }
+
+  lowmc_key = s_lowmc_key;
+  return lowmc_key, tapes;
+}

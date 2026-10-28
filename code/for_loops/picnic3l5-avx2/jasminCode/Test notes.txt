@@ -1,0 +1,5 @@
+Test notes: 
+
+Valgrind
+SCI
+Type Checker

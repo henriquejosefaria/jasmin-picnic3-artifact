@@ -1,0 +1,9 @@
+Fundamentação do pedido de renovação
+
+
+Durante o último ano do decorrer da bolsa, foram elaborados dois trabalhos usando as ferramentas Jasmin e EasyCrypt. Jasmin trata-se de uma linguagem desenhada para permitir implementações concisas de alta-velocidade e altamente modulares. Para além disso, estas implementações podem ser formalmente verificadas usando EasyCrypt, um assitente de provas. O primeiro trabalho reporta-se a implementações de um esquema de assinaturas pós-quântico (PICNIC3) referentes a dois níveis de segurança estabelecidos pelo NIST nomeadamente, L3 e L5. Para cada um dos níveis foram implementadas uma versão de referência e uma versão otimizada para avx2. No segundo trabalho, estableceu-se, pela primeira vez, uma relação completa entre a implementação do esquema clássico RSA-PSS e os seus limites de segurança teóricos. Começou-se por proceder a uma implementação otimizada e eficiente do RSA-PSS usando CRT (chinese-remainder theorem) em Jasmin, seguindo-se, em EasyCrypt, uma prova de correção (establecimento de uma ligação à especificação do mesmo segundo os documentos RFC-8017 e NIST 186-5), e uma posterior prova de segurança (definição dos limites concretos de segurança do esquema).
+
+Neste momento estão pendentes a escrita e submissão de dois artigos referentes ao dois trabalhos supramencionados bem como a realização de um projeto num grupo de trabalho internacional relativo a um esquema pós-quântico: Syndrome Decoding in the Head. Neste trabalho produzir-se-ão implementações otimizadas do algoritmo bem como provas de segurança sobre o mesmo.
+
+
+

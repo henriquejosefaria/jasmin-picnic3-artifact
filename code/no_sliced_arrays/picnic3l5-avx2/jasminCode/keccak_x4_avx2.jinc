@@ -1,0 +1,1083 @@
+require "params.jinc"
+require "keccak/keccak1600x4_updstate.jinc"
+
+/* See keccak_avx2.jinc for the rationale: namespaces below are sized to
+ * the CHUNK actually absorbed/squeezed per call (not the size of the
+ * bigger array a chunk is copied out of/into), matching how
+ * new_versions_sigSizeVerify/.../keccak_x4_avx2.jinc itself instantiates
+ * A<N>x4::_absorb_updstate_avx2x4 / _squeeze_updstate_avx2x4. This file
+ * already copied runtime-offset chunks into small local "buf"-style
+ * stack arrays before splitting them into the 4 lanes (buf0..buf3), so
+ * that part of the no_array_slicing bridging doesn't need to change -
+ * only the low-level primitive calls made on those local buffers do. */
+
+namespace A1x4 {
+  param int _ASIZE = 1;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+
+namespace A2x4 {
+  param int _ASIZE = 2;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+
+namespace A32x4 {
+  param int _ASIZE = PNC_SALT_SIZE;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+
+namespace A48x4 {
+  param int _ASIZE = COMMITMENT_SIZE;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+
+namespace A64x4 {
+  param int _ASIZE = 2 * MAX_SEED_SIZE_BYTES;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+
+namespace A256x4 {
+  param int _ASIZE = TAPE_SIZE_BYTES;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+
+namespace A1024x4 {
+  param int _ASIZE = COMMITMENTS_SIZE;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+
+namespace A2048x4 {
+  param int _ASIZE = MSGS_FULL_SIZE;
+  require "keccak/keccak1600x4_updstate_ASIZE.jinc"
+}
+
+/**************************/
+/*     HASH FUNCTIONS     */
+/**************************/
+
+
+#[returnaddress="stack"]
+fn __hashSeed_x4_1(
+  #[secret]         reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] out,
+  #[poly=inputSeed] reg ptr u8[TREE_NODES_1_SIZE] inputSeed,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt, 
+  #[public]         reg u64 inputSeed_idx,
+  #[poly=repIndex]  reg u16 repIndex, 
+  #[poly=nodeIndex] reg u16 nodeIndex
+) -> reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+  
+  reg u64 i t;
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+
+  stack u8[1] prefix_s;
+  stack u8[2] t16b_s;
+  stack u8[8] t16x4;
+  stack u8[TREE_DATA_SIZE*4] buf;
+
+  reg ptr u8[1] prefix;
+  reg ptr u8[2] t16b t16x40 t16x41 t16x42 t16x43;
+  reg ptr u8[TREE_DATA_SIZE] buf0, buf1, buf2, buf3;
+  reg ptr u8[2 * MAX_SEED_SIZE_BYTES] out0, out1, out2, out3;
+
+  stack u64[4*25+1] s_st;
+  reg ptr u64[4*25+1] st;
+
+  inline int z;
+
+  () = #spill(out);
+  () = #spill(inputSeed);
+  () = #spill(inputSeed_idx);
+  () = #spill(salt);
+  () = #spill(repIndex);
+  () = #spill(nodeIndex);
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  x = (R136 >> 3);
+  y = SHAKE;
+  st = s_st;
+  st = _init_updstate_avx2x4(st, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  len = 1;
+  prefix_s[u8 0] = HASH_PREFIX_1;
+  prefix = prefix_s;
+  st = A1x4::_absorb_bcast_updstate_avx2x4(st, prefix, len);
+
+  /* no_array_slicing: copy the 4-lane chunk out of the bigger
+     inputSeed array at a runtime offset first (unchanged from before -
+     this file already avoided slicing here). */
+  () = #unspill(inputSeed);
+  () = #unspill(inputSeed_idx);
+  for z=0 to TREE_DATA_SIZE*4/8
+  {
+    t = inputSeed.[u64 inputSeed_idx + z*8];
+    buf[u64 z] = t;
+  }
+  () = #spill(inputSeed);
+  () = #spill(inputSeed_idx);
+
+  len = 32;
+  buf0 = buf[0:TREE_DATA_SIZE];
+  buf1 = buf[TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf2 = buf[2*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf3 = buf[3*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  st = A32x4::_absorb_updstate_avx2x4(st, buf0, buf1, buf2, buf3, len);
+
+  len = 32;
+  () = #unspill(salt);
+  st = A32x4::_absorb_bcast_updstate_avx2x4(st, salt, len);
+
+  len = 2;
+  () = #unspill(repIndex);
+  t16b_s[u16 0] = repIndex;
+  t16b = t16b_s;
+  st = A2x4::_absorb_bcast_updstate_avx2x4(st, t16b, len);
+
+  () = #unspill(nodeIndex);
+  t16x4[u16 0] = nodeIndex;
+  nodeIndex += 1;
+  t16x4[u16 1] = nodeIndex;
+  nodeIndex += 1;
+  t16x4[u16 2] = nodeIndex;
+  nodeIndex += 1;
+  t16x4[u16 3] = nodeIndex;
+
+  t16x40 = t16x4[0:2];
+  t16x41 = t16x4[2:2];
+  t16x42 = t16x4[4:2];
+  t16x43 = t16x4[6:2];
+
+  len = 2;
+  st = A2x4::_absorb_updstate_avx2x4(st, t16x40, t16x41, t16x42, t16x43, len);
+  st = _finish_updstate_avx2x4(st);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  () = #unspill(out);
+
+  len = 2 * PNC_SEED_SIZE;
+  out0 = out[0:2 * MAX_SEED_SIZE_BYTES];
+  out1 = out[2*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES];
+  out2 = out[4*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES];
+  out3 = out[6*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES];
+  _, out0, out1, out2, out3 =
+    A64x4::_squeeze_updstate_avx2x4(st, out0, out1, out2, out3, len);
+
+  out[0:2 * MAX_SEED_SIZE_BYTES] = out0;
+  out[2*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES] = out1;
+  out[4*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES] = out2;
+  out[6*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES] = out3;
+
+  return out;
+}
+
+#[returnaddress="stack"]
+fn _hashSeed_x4_2(
+  #[secret]         reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] out,
+  #[poly=inputSeed] reg ptr u8[TREE_NODES_2_SIZE] inputSeed,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt, 
+  #[public]         reg u64 inputSeed_idx,
+  #[poly=repIndex]  reg u16 repIndex, 
+  #[poly=nodeIndex] reg u16 nodeIndex
+) -> reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+
+  reg u64 i t;
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+
+  stack u8[1] prefix_s;
+  stack u8[2] t16b_s;
+  stack u8[8] t16x4;
+  stack u8[TREE_DATA_SIZE*4] buf;
+
+  reg ptr u8[1] prefix;
+  reg ptr u8[2] t16b t16x40 t16x41 t16x42 t16x43;
+  reg ptr u8[TREE_DATA_SIZE] buf0, buf1, buf2, buf3;
+  reg ptr u8[2 * MAX_SEED_SIZE_BYTES] out0, out1, out2, out3;
+
+  stack u64[4*25+1] s_st;
+  reg ptr u64[4*25+1] st;
+
+  inline int z;
+
+  () = #spill(out, salt, repIndex, nodeIndex);
+
+  for z = 0 to (TREE_DATA_SIZE*4) / 8
+  {
+    t = inputSeed.[:u64 inputSeed_idx + z*8];
+    buf[:u64 z] = t;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  x = (R136 >> 3);
+  y = SHAKE;
+  st = s_st;
+  st = _init_updstate_avx2x4(st, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  len = 1;
+  prefix_s[u8 0] = HASH_PREFIX_1;
+  prefix = prefix_s;
+  st = A1x4::_absorb_bcast_updstate_avx2x4(st, prefix, len);
+
+  len = TREE_DATA_SIZE;
+  buf0 = buf[0:TREE_DATA_SIZE];
+  buf1 = buf[TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf2 = buf[2*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf3 = buf[3*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  st = A32x4::_absorb_updstate_avx2x4(st, buf0, buf1, buf2, buf3, len);
+
+  len = 32;
+  () = #unspill(salt);
+  st = A32x4::_absorb_bcast_updstate_avx2x4(st, salt, len);
+
+  len = 2;
+  () = #unspill(repIndex);
+  t16b_s[u16 0] = repIndex;
+  t16b = t16b_s;
+  st = A2x4::_absorb_bcast_updstate_avx2x4(st, t16b, len);
+
+  () = #unspill(nodeIndex);
+  t16x4[u16 0] = nodeIndex;
+  nodeIndex += 1;
+  t16x4[u16 1] = nodeIndex;
+  nodeIndex += 1;
+  t16x4[u16 2] = nodeIndex;
+  nodeIndex += 1;
+  t16x4[u16 3] = nodeIndex;
+
+  t16x40 = t16x4[0:2];
+  t16x41 = t16x4[2:2];
+  t16x42 = t16x4[4:2];
+  t16x43 = t16x4[6:2];
+
+  len = 2;
+  st = A2x4::_absorb_updstate_avx2x4(st, t16x40, t16x41, t16x42, t16x43, len);
+  st = _finish_updstate_avx2x4(st);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  () = #unspill(out);
+
+  len = 2 * PNC_SEED_SIZE;
+  out0 = out[0:2 * MAX_SEED_SIZE_BYTES];
+  out1 = out[2*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES];
+  out2 = out[4*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES];
+  out3 = out[6*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES];
+  _, out0, out1, out2, out3 =
+    A64x4::_squeeze_updstate_avx2x4(st, out0, out1, out2, out3, len);
+
+  out[0:2 * MAX_SEED_SIZE_BYTES] = out0;
+  out[2*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES] = out1;
+  out[4*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES] = out2;
+  out[6*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES] = out3;
+
+  return out;
+}
+
+#[returnaddress="stack"]
+fn _hashSeed_x4_22(
+  #[secret]         reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] out,
+  #[poly=inputSeed] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] inputSeed,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt, 
+  #[public]         reg u64 inputSeed_idx,
+  #[poly=repIndex]  reg u16 repIndex, 
+  #[poly=nodeIndex] reg u16 nodeIndex
+) -> reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+
+  reg u64 i t;
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+
+  stack u8[1] prefix_s;
+  stack u8[2] t16b_s;
+  stack u8[8] t16x4;
+  stack u8[TREE_DATA_SIZE*4] buf;
+
+  reg ptr u8[1] prefix;
+  reg ptr u8[2] t16b t16x40 t16x41 t16x42 t16x43;
+  reg ptr u8[TREE_DATA_SIZE] buf0, buf1, buf2, buf3;
+  reg ptr u8[2 * MAX_SEED_SIZE_BYTES] out0, out1, out2, out3;
+
+  stack u64[4*25+1] s_st;
+  reg ptr u64[4*25+1] st;
+
+  inline int z;
+
+  () = #spill(out, inputSeed, inputSeed_idx, salt, repIndex, nodeIndex);
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  x = (R136 >> 3);
+  y = SHAKE;
+  st = s_st;
+  st = _init_updstate_avx2x4(st, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  len = 1;
+  prefix_s[u8 0] = HASH_PREFIX_1;
+  prefix = prefix_s;
+  st = A1x4::_absorb_bcast_updstate_avx2x4(st, prefix, len);
+
+  () = #unspill(inputSeed);
+  () = #unspill(inputSeed_idx);
+  for z=0 to TREE_DATA_SIZE*4/8
+  {
+    t = inputSeed.[:u64 inputSeed_idx+z*8];
+    buf[:u64 z] = t;
+  }
+  () = #spill(inputSeed);
+  () = #spill(inputSeed_idx);
+
+  len = 32;
+  buf0 = buf[0:TREE_DATA_SIZE];
+  buf1 = buf[TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf2 = buf[2*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf3 = buf[3*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  st = A32x4::_absorb_updstate_avx2x4(st, buf0, buf1, buf2, buf3, len);
+
+  len = 32;
+  () = #unspill(salt);
+  st = A32x4::_absorb_bcast_updstate_avx2x4(st, salt, len);
+
+  len = 2;
+  () = #unspill(repIndex);
+  t16b_s[u16 0] = repIndex;
+  t16b = t16b_s;
+  st = A2x4::_absorb_bcast_updstate_avx2x4(st, t16b, len);
+
+  () = #unspill(nodeIndex);
+  t16x4[u16 0] = nodeIndex;
+  nodeIndex += 1;
+  t16x4[u16 1] = nodeIndex;
+  nodeIndex += 1;
+  t16x4[u16 2] = nodeIndex;
+  nodeIndex += 1;
+  t16x4[u16 3] = nodeIndex;
+
+  t16x40 = t16x4[0:2];
+  t16x41 = t16x4[2:2];
+  t16x42 = t16x4[4:2];
+  t16x43 = t16x4[6:2];
+
+  len = 2;
+  st = A2x4::_absorb_updstate_avx2x4(st, t16x40, t16x41, t16x42, t16x43, len);
+  st = _finish_updstate_avx2x4(st);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  () = #unspill(out);
+
+  len = 2 * PNC_SEED_SIZE;
+  out0 = out[0:2 * MAX_SEED_SIZE_BYTES];
+  out1 = out[2*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES];
+  out2 = out[4*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES];
+  out3 = out[6*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES];
+  _, out0, out1, out2, out3 =
+    A64x4::_squeeze_updstate_avx2x4(st, out0, out1, out2, out3, len);
+
+  out[0:2 * MAX_SEED_SIZE_BYTES] = out0;
+  out[2*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES] = out1;
+  out[4*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES] = out2;
+  out[6*MAX_SEED_SIZE_BYTES:2*MAX_SEED_SIZE_BYTES] = out3;
+
+  return out;
+}
+
+
+#[returnaddress="stack"]
+fn __hashTapes_x4(
+  #[secret]  reg ptr u8[TAPES_FULL_SIZE] out,
+  #[secret]  reg ptr u8[TREE_NODES_2_SIZE] seeds,
+  #[secret]  reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public]  reg u16 round,
+  #[public]  reg u16 player,
+  #[public]  reg u64 base_seeds base_out
+) -> reg ptr u8[TAPES_FULL_SIZE]
+{
+
+  reg u16 t16;
+  reg u64 i t;
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+
+  stack u8[2] t16b_s;
+  stack u8[8] t16x4;
+  stack u8[TREE_DATA_SIZE*4] buf;
+  stack u8[4 * TAPE_SIZE_BYTES] bufOut;
+
+  reg ptr u8[2] t16b t16x40 t16x41 t16x42 t16x43;
+  reg ptr u8[TREE_DATA_SIZE] buf0, buf1, buf2, buf3;
+  reg ptr u8[TAPE_SIZE_BYTES] out0, out1, out2, out3;
+
+  stack u64[4*25+1] s_st;
+  reg ptr u64[4*25+1] st;
+
+  inline int z;
+
+  () = #spill(out);
+  () = #spill(seeds);
+  () = #spill(salt);
+  () = #spill(round);
+  () = #spill(player);
+  () = #spill(base_seeds);
+  () = #spill(base_out);
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  x = (R136 >> 3);
+  y = SHAKE;
+  st = s_st;
+  st = _init_updstate_avx2x4(st, x, y);
+
+  () = #unspill(seeds);
+  () = #unspill(base_seeds);
+  for z=0 to TREE_DATA_SIZE*4/8
+  {
+    t = seeds.[u64 base_seeds+z*8];
+    buf[u64 z] = t;
+  }
+  () = #spill(seeds);
+  () = #spill(base_seeds);
+
+  len = 32;
+  buf0 = buf[0:TREE_DATA_SIZE];
+  buf1 = buf[TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf2 = buf[2*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf3 = buf[3*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  st = A32x4::_absorb_updstate_avx2x4(st, buf0, buf1, buf2, buf3, len);
+
+  len = 32;
+  () = #unspill(salt);
+  st = A32x4::_absorb_bcast_updstate_avx2x4(st, salt, len);
+
+  len = 2;
+  () = #unspill(round);
+  t16 = round;
+  t16b_s[u16 0] = t16;
+  t16b = t16b_s[0:2];
+  st = A2x4::_absorb_bcast_updstate_avx2x4(st, t16b, len);
+
+  () = #unspill(player);
+  t16x4[u16 0] = player;
+  player += 1;
+  t16x4[u16 1] = player;
+  player += 1;
+  t16x4[u16 2] = player;
+  player += 1;
+  t16x4[u16 3] = player;
+
+  t16x40 = t16x4[0:2];
+  t16x41 = t16x4[2:2];
+  t16x42 = t16x4[4:2];
+  t16x43 = t16x4[6:2];
+
+  len = 2;
+  st = A2x4::_absorb_updstate_avx2x4(st, t16x40, t16x41, t16x42, t16x43, len);
+  st = _finish_updstate_avx2x4(st);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  len = TAPE_SIZE_BYTES;
+  out0 = bufOut[0:TAPE_SIZE_BYTES];
+  out1 = bufOut[TAPE_SIZE_BYTES:TAPE_SIZE_BYTES];
+  out2 = bufOut[2*TAPE_SIZE_BYTES:TAPE_SIZE_BYTES];
+  out3 = bufOut[3*TAPE_SIZE_BYTES:TAPE_SIZE_BYTES];
+  _, out0, out1, out2, out3 =
+    A256x4::_squeeze_updstate_avx2x4(st, out0, out1, out2, out3, len);
+  bufOut[0:TAPE_SIZE_BYTES] = out0;
+  bufOut[TAPE_SIZE_BYTES:TAPE_SIZE_BYTES]= out1;
+  bufOut[2*TAPE_SIZE_BYTES:TAPE_SIZE_BYTES] = out2;
+  bufOut[3*TAPE_SIZE_BYTES:TAPE_SIZE_BYTES] = out3;
+
+  () = #unspill(out);
+  () = #unspill(base_out);
+  for z=0 to TAPE_SIZE_BYTES*4/8
+  {
+    t = bufOut.[u64 z*8];
+    out.[u64 base_out] = t;
+    base_out += 8;
+  }
+
+  return out;
+}
+
+#[returnaddress="stack"]
+fn __hashTapes2_x4(
+  #[secret]  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] out,
+  #[secret]  reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  #[secret]  reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public]  reg u64 round,
+  #[public]  reg u16 player,
+  #[public]  reg u64 base_seeds base_out
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+
+  reg u16 t16;
+  reg u64 i t;
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+
+  stack u8[2] t16b_s;
+  stack u8[8] t16x4;
+  stack u8[TREE_DATA_SIZE*4] buf;
+  stack u8[4 * TAPE_SIZE_BYTES] bufOut;
+
+  reg ptr u8[2] t16b t16x40 t16x41 t16x42 t16x43;
+  reg ptr u8[TREE_DATA_SIZE] buf0, buf1, buf2, buf3;
+  reg ptr u8[TAPE_SIZE_BYTES] out0, out1, out2, out3;
+
+  stack u64[4*25+1] s_st;
+  reg ptr u64[4*25+1] st;
+
+  inline int z;
+
+  () = #spill(out);
+  () = #spill(seeds);
+  () = #spill(salt);
+  () = #spill(round);
+  () = #spill(player);
+  () = #spill(base_seeds);
+  () = #spill(base_out);
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  x = (R136 >> 3);
+  y = SHAKE;
+  st = s_st;
+  st = _init_updstate_avx2x4(st, x, y);
+
+  () = #unspill(seeds);
+  () = #unspill(base_seeds);
+  for z=0 to TREE_DATA_SIZE*4/8
+  {
+    t = seeds.[u64 base_seeds];
+    buf.[u64 z*8] = t;
+    base_seeds += 8;
+  }
+  () = #spill(seeds);
+  () = #spill(base_seeds);
+
+  len = 32;
+  buf0 = buf[0:TREE_DATA_SIZE];
+  buf1 = buf[TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf2 = buf[2*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf3 = buf[3*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  st = A32x4::_absorb_updstate_avx2x4(st, buf0, buf1, buf2, buf3, len);
+
+  len = 32;
+  () = #unspill(salt);
+  st = A32x4::_absorb_bcast_updstate_avx2x4(st, salt, len);
+
+  len = 2;
+  () = #unspill(round);
+  t16 = round;
+  t16b_s[u16 0] = t16;
+  t16b = t16b_s[0:2];
+  st = A2x4::_absorb_bcast_updstate_avx2x4(st, t16b, len);
+
+  () = #unspill(player);
+  t16x4[u16 0] = player;
+  player += 1;
+  t16x4[u16 1] = player;
+  player += 1;
+  t16x4[u16 2] = player;
+  player += 1;
+  t16x4[u16 3] = player;
+
+  t16x40 = t16x4[0:2];
+  t16x41 = t16x4[2:2];
+  t16x42 = t16x4[4:2];
+  t16x43 = t16x4[6:2];
+
+  len = 2;
+  st = A2x4::_absorb_updstate_avx2x4(st, t16x40, t16x41, t16x42, t16x43, len);
+  st = _finish_updstate_avx2x4(st);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  len = TAPE_SIZE_BYTES;
+  out0 = bufOut[0:TAPE_SIZE_BYTES];
+  out1 = bufOut[TAPE_SIZE_BYTES:TAPE_SIZE_BYTES];
+  out2 = bufOut[2*TAPE_SIZE_BYTES:TAPE_SIZE_BYTES];
+  out3 = bufOut[3*TAPE_SIZE_BYTES:TAPE_SIZE_BYTES];
+  _, out0, out1, out2, out3 =
+    A256x4::_squeeze_updstate_avx2x4(st, out0, out1, out2, out3, len);
+  bufOut[0:TAPE_SIZE_BYTES] = out0;
+  bufOut[TAPE_SIZE_BYTES:TAPE_SIZE_BYTES]= out1;
+  bufOut[2*TAPE_SIZE_BYTES:TAPE_SIZE_BYTES] = out2;
+  bufOut[3*TAPE_SIZE_BYTES:TAPE_SIZE_BYTES] = out3;
+
+  () = #unspill(out);
+  () = #unspill(base_out);
+  i=0;
+  while(i < TAPE_SIZE_BYTES*4)
+  {
+    t = bufOut.[u64 i];
+    out.[u64 base_out] = t;
+    base_out += 8;
+    i += 8;
+  }
+
+  return out;
+}
+
+#[returnaddress="stack"]
+fn _commit_x4(
+  #[secret] reg ptr u8[COMMITMENTS_FULL_SIZE] out,
+  #[secret] reg ptr u8[TREE_NODES_2_SIZE] seeds,
+  #[secret] reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public] reg u16 round,
+  #[public] reg u16 player,
+  #[public] reg u64 base_seeds base_out
+) -> reg ptr u8[COMMITMENTS_FULL_SIZE]
+{
+
+  reg u16 t16;
+  reg u64 i t;
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+
+  stack u8[2] t16b_s;
+  stack u8[8] t16x4;
+  stack u8[TREE_DATA_SIZE*4] buf;
+  stack u8[4 * COMMITMENT_SIZE]  bufCom;
+
+  reg ptr u8[2] t16b t16x40 t16x41 t16x42 t16x43;
+  reg ptr u8[TREE_DATA_SIZE] buf0 buf1 buf2 buf3;
+  reg ptr u8[COMMITMENT_SIZE] out0, out1, out2, out3;
+
+  stack u64[4*25+1] s_st;
+  reg ptr u64[4*25+1] st;
+
+  inline int z;
+
+  () = #spill(out, salt, round, player, base_out);
+
+  i=0;
+  while(i < TREE_DATA_SIZE*4)
+  {
+    t = seeds.[u64 base_seeds];
+    buf.[u64 i] = t;
+    base_seeds += 8;
+    i += 8;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  x = (R136 >> 3);
+  y = SHAKE;
+  st = s_st;
+  st = _init_updstate_avx2x4(st, x, y);
+
+  len = 32;
+  buf0 = buf[0:TREE_DATA_SIZE];
+  buf1 = buf[TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf2 = buf[2*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf3 = buf[3*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  st = A32x4::_absorb_updstate_avx2x4(st, buf0, buf1, buf2, buf3, len);
+
+  len = 32;
+  () = #unspill(salt);
+  st = A32x4::_absorb_bcast_updstate_avx2x4(st, salt, len);
+
+  len = 2;
+  () = #unspill(round);
+  t16 = round;
+  t16b_s[u16 0] = t16;
+  t16b = t16b_s;
+  st = A2x4::_absorb_bcast_updstate_avx2x4(st, t16b, len);
+
+  () = #unspill(player);
+  t16x4[u16 0] = player;
+  player += 1;
+  t16x4[u16 1] = player;
+  player += 1;
+  t16x4[u16 2] = player;
+  player += 1;
+  t16x4[u16 3] = player;
+
+  t16x40 = t16x4[0:2];
+  t16x41 = t16x4[2:2];
+  t16x42 = t16x4[4:2];
+  t16x43 = t16x4[6:2];
+
+  len = 2;
+  st = A2x4::_absorb_updstate_avx2x4(st, t16x40, t16x41, t16x42, t16x43, len);
+  st = _finish_updstate_avx2x4(st);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  len = COMMITMENT_SIZE;
+  out0 = bufCom[0:COMMITMENT_SIZE];
+  out1 = bufCom[COMMITMENT_SIZE:COMMITMENT_SIZE];
+  out2 = bufCom[2*COMMITMENT_SIZE:COMMITMENT_SIZE];
+  out3 = bufCom[3*COMMITMENT_SIZE:COMMITMENT_SIZE];
+  _, out0, out1, out2, out3 =
+    A64x4::_squeeze_updstate_avx2x4(st, out0, out1, out2, out3, len);
+  bufCom[0:COMMITMENT_SIZE] = out0;
+  bufCom[COMMITMENT_SIZE:COMMITMENT_SIZE]= out1;
+  bufCom[2*COMMITMENT_SIZE:COMMITMENT_SIZE] = out2;
+  bufCom[3*COMMITMENT_SIZE:COMMITMENT_SIZE] = out3;
+
+  () = #unspill(out);
+  () = #unspill(base_out);
+  i=0;
+  while(i < COMMITMENT_SIZE*4)
+  {
+    t = bufCom.[u64 i];
+    out.[u64 base_out] = t;
+    base_out += 8;
+    i += 8;
+  }
+
+  return out;
+}
+
+#[returnaddress="stack"]
+fn _commit2_x4(
+  #[secret] reg ptr u8[COMMITMENTS_FULL_SIZE] out,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  #[secret] reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public] reg u16 round,
+  #[public] reg u16 player,
+  #[public] reg u64 base_seeds base_out
+) -> reg ptr u8[COMMITMENTS_FULL_SIZE]
+{
+
+  reg u16 t16;
+  reg u64 i t;
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+
+  stack u8[2] t16b_s;
+  stack u8[8] t16x4;
+  stack u8[TREE_DATA_SIZE*4] buf;
+  stack u8[4 * COMMITMENT_SIZE]  bufCom;
+
+  reg ptr u8[2] t16b t16x40 t16x41 t16x42 t16x43;
+  reg ptr u8[TREE_DATA_SIZE] buf0 buf1 buf2 buf3;
+  reg ptr u8[COMMITMENT_SIZE] out0, out1, out2, out3;
+
+  stack u64[4*25+1] s_st;
+  reg ptr u64[4*25+1] st;
+
+  () = #spill(out, salt, round, player, base_out);
+
+  i=0;
+  while(i < TREE_DATA_SIZE*4)
+  {
+    t = seeds.[u64 base_seeds];
+    buf.[u64 i] = t;
+    base_seeds += 8;
+    i += 8;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  x = (R136 >> 3);
+  y = SHAKE;
+  st = s_st;
+  st = _init_updstate_avx2x4(st, x, y);
+
+
+  len = 32;
+  buf0 = buf[0:TREE_DATA_SIZE];
+  buf1 = buf[TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf2 = buf[2*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  buf3 = buf[3*TREE_DATA_SIZE:TREE_DATA_SIZE];
+  st = A32x4::_absorb_updstate_avx2x4(st, buf0, buf1, buf2, buf3, len);
+
+  len = 32;
+  () = #unspill(salt);
+  st = A32x4::_absorb_bcast_updstate_avx2x4(st, salt, len);
+
+  len = 2;
+  () = #unspill(round);
+  t16 = round;
+  t16b_s[u16 0] = t16;
+  t16b = t16b_s;
+  st = A2x4::_absorb_bcast_updstate_avx2x4(st, t16b, len);
+
+  () = #unspill(player);
+  t16x4[u16 0] = player;
+  player += 1;
+  t16x4[u16 1] = player;
+  player += 1;
+  t16x4[u16 2] = player;
+  player += 1;
+  t16x4[u16 3] = player;
+
+  t16x40 = t16x4[0:2];
+  t16x41 = t16x4[2:2];
+  t16x42 = t16x4[4:2];
+  t16x43 = t16x4[6:2];
+
+  len = 2;
+  st = A2x4::_absorb_updstate_avx2x4(st, t16x40, t16x41, t16x42, t16x43, len);
+  st = _finish_updstate_avx2x4(st);
+
+  /***********************/
+  /* RETRIEVE FROM STATE */
+  /***********************/
+
+  len = COMMITMENT_SIZE;
+  out0 = bufCom[0:COMMITMENT_SIZE];
+  out1 = bufCom[COMMITMENT_SIZE:COMMITMENT_SIZE];
+  out2 = bufCom[2*COMMITMENT_SIZE:COMMITMENT_SIZE];
+  out3 = bufCom[3*COMMITMENT_SIZE:COMMITMENT_SIZE];
+  _, out0, out1, out2, out3 =
+    A64x4::_squeeze_updstate_avx2x4(st, out0, out1, out2, out3, len);
+  bufCom[0:COMMITMENT_SIZE] = out0;
+  bufCom[COMMITMENT_SIZE:COMMITMENT_SIZE]= out1;
+  bufCom[2*COMMITMENT_SIZE:COMMITMENT_SIZE] = out2;
+  bufCom[3*COMMITMENT_SIZE:COMMITMENT_SIZE] = out3;
+
+  () = #unspill(out, base_out);
+  i=0;
+  while(i < COMMITMENT_SIZE*4)
+  {
+    t = bufCom.[u64 i];
+    out.[u64 base_out] = t;
+    base_out += 8;
+    i += 8;
+  }
+
+  return out;
+}
+
+fn _commit_h_x4(
+  #[poly=in] reg ptr u8[CH_ROUND_SIZE * PNC_N_ROUNDS] out,
+  #[poly=in] reg ptr u8[COMMITMENTS_SIZE * PNC_N_ROUNDS] in,
+  #[public] reg u64 idx
+) -> reg ptr u8[CH_ROUND_SIZE * PNC_N_ROUNDS]
+{
+  reg u64 i t offset;
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+
+  stack u8[COMMITMENTS_SIZE*4] bufIn;
+  reg ptr u8[COMMITMENTS_SIZE] bufIn0, bufIn1, bufIn2, bufIn3;
+  stack u8[4*CH_ROUND_SIZE] bufOut;
+
+  reg ptr u8[CH_ROUND_SIZE] buf0, buf1, buf2, buf3;
+
+  stack u64[4*25+1] s_st;
+  reg ptr u64[4*25+1] st;
+
+  () = #spill(out, idx);
+
+  i=0;
+  offset = idx;
+  offset *= COMMITMENTS_SIZE;
+  while(i < COMMITMENTS_SIZE*4)
+  {
+    t = in.[u64 offset];
+    bufIn.[u64 i] = t;
+    offset += 8;
+    i += 8;
+  }
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  x = (R136 >> 3);
+  y = SHAKE;
+  st = s_st;
+  st = _init_updstate_avx2x4(st, x, y);
+
+  bufIn0 = bufIn[0:COMMITMENTS_SIZE];
+  bufIn1 = bufIn[COMMITMENTS_SIZE:COMMITMENTS_SIZE];
+  bufIn2 = bufIn[2*COMMITMENTS_SIZE:COMMITMENTS_SIZE];
+  bufIn3 = bufIn[3*COMMITMENTS_SIZE:COMMITMENTS_SIZE];
+  len = COMMITMENTS_SIZE;
+  st = A1024x4::_absorb_updstate_avx2x4(st, bufIn0,
+                                             bufIn1,
+                                             bufIn2,
+                                             bufIn3,
+                                             len);
+  st = _finish_updstate_avx2x4(st);
+
+  len = CH_ROUND_SIZE;
+  buf0 = bufOut[0:CH_ROUND_SIZE];
+  buf1 = bufOut[CH_ROUND_SIZE:CH_ROUND_SIZE];
+  buf2 = bufOut[2*CH_ROUND_SIZE:CH_ROUND_SIZE];
+  buf3 = bufOut[3*CH_ROUND_SIZE:CH_ROUND_SIZE];
+  _, buf0, buf1, buf2, buf3 =
+    A64x4::_squeeze_updstate_avx2x4(st, buf0, buf1, buf2, buf3, len);
+  bufOut[0:CH_ROUND_SIZE] = buf0;
+  bufOut[CH_ROUND_SIZE:CH_ROUND_SIZE] = buf1;
+  bufOut[2*CH_ROUND_SIZE:CH_ROUND_SIZE] = buf2;
+  bufOut[3*CH_ROUND_SIZE:CH_ROUND_SIZE] = buf3;
+
+  () = #unspill(out, idx);
+  i=0;
+  offset = idx;
+  offset *= CH_ROUND_SIZE;
+  while(i < CH_ROUND_SIZE*4)
+  {
+    t = bufOut.[u64 i];
+    out.[u64 offset] = t;
+
+    offset += 8;
+    i += 8;
+  }
+
+  return out;
+}
+
+fn _commit_v_x4(
+  #[secret] reg ptr u8[CV_ROUND_SIZE * PNC_N_ROUNDS] out,
+  #[secret] reg ptr u8[MZD_SIZE * PNC_N_ROUNDS] inputs,
+  #[secret] reg ptr u8[MSGS_FULL_SIZE * PNC_N_ROUNDS] msgs,
+  #[public] reg u64 idx
+) -> reg ptr u8[CV_ROUND_SIZE * PNC_N_ROUNDS]
+{
+
+  reg u64 i t offset;
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+
+  stack u8[MZD_SIZE*4] bufInput;
+  stack u8[MSGS_FULL_SIZE*4] bufMsgs;
+  stack u8[4 * CV_ROUND_SIZE]  bufV;
+
+  reg ptr u8[MSGS_FULL_SIZE] aux0, aux1, aux2, aux3;
+  reg ptr u8[MZD_SIZE] bufI0, bufI1, bufI2, bufI3;
+  reg ptr u8[CV_ROUND_SIZE] buf0, buf1, buf2, buf3;
+
+  stack u64[4*25+1] s_st;
+  reg ptr u64[4*25+1] st;
+
+  () = #spill(out, inputs, msgs, idx);
+
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  x = (R136 >> 3);
+  y = SHAKE;
+  st = s_st;
+  st = _init_updstate_avx2x4(st, x, y);
+
+  () = #unspill(inputs, idx);
+  offset = idx;
+  offset *= MZD_SIZE;
+  i = 0;
+  while(i < MZD_SIZE * 4)
+  {
+    t = inputs.[u64 offset];
+    bufInput.[u64 i] = t;
+
+    offset += 8;
+    i += 8;
+  }
+
+  bufI0 = bufInput[0:MZD_SIZE];
+  bufI1 = bufInput[MZD_SIZE:MZD_SIZE];
+  bufI2 = bufInput[2*MZD_SIZE:MZD_SIZE];
+  bufI3 = bufInput[3*MZD_SIZE:MZD_SIZE];
+
+  len = 32;
+  st = A32x4::_absorb_updstate_avx2x4(st, bufI0, bufI1, bufI2, bufI3, len);
+
+  () = #unspill(msgs, idx);
+
+  offset = idx;
+  offset *= MSGS_FULL_SIZE;
+  i = 0;
+  while(i < MSGS_FULL_SIZE * 4)
+  {
+    t = msgs.[u64 offset];
+    bufMsgs.[u64 i] = t;
+
+    offset += 8;
+    i += 8;
+  }
+
+  aux0 = bufMsgs[0:MSGS_FULL_SIZE];
+  aux1 = bufMsgs[MSGS_FULL_SIZE:MSGS_FULL_SIZE];
+  aux2 = bufMsgs[2*MSGS_FULL_SIZE:MSGS_FULL_SIZE];
+  aux3 = bufMsgs[3*MSGS_FULL_SIZE:MSGS_FULL_SIZE];
+  len = MSGS_FULL_SIZE;
+  st = A2048x4::_absorb_updstate_avx2x4(st, aux0, aux1, aux2, aux3, len);
+  st = _finish_updstate_avx2x4(st);
+
+  len = CV_ROUND_SIZE;
+  buf0 = bufV[0:CV_ROUND_SIZE];
+  buf1 = bufV[CV_ROUND_SIZE:CV_ROUND_SIZE];
+  buf2 = bufV[2*CV_ROUND_SIZE:CV_ROUND_SIZE];
+  buf3 = bufV[3*CV_ROUND_SIZE:CV_ROUND_SIZE];
+  _, buf0, buf1, buf2, buf3 =
+    A64x4::_squeeze_updstate_avx2x4(st, buf0, buf1, buf2, buf3, len);
+  bufV[0:CV_ROUND_SIZE] = buf0;
+  bufV[CV_ROUND_SIZE:CV_ROUND_SIZE] = buf1;
+  bufV[2*CV_ROUND_SIZE:CV_ROUND_SIZE] = buf2;
+  bufV[3*CV_ROUND_SIZE:CV_ROUND_SIZE] = buf3;
+
+  () = #unspill(out, idx);
+  offset = idx;
+  offset *= CV_ROUND_SIZE;
+  i=0;
+  while(i < CV_ROUND_SIZE*4)
+  {
+    t = bufV.[u64 i];
+    out.[u64 offset] = t;
+    offset += 8;
+    i += 8;
+  }
+
+  return out;
+}
+

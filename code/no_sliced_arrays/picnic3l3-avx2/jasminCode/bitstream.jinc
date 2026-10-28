@@ -1,0 +1,115 @@
+require "params.jinc"
+
+inline fn __mzd_from_bitstream_msgs(
+	  #[secret] reg ptr u8[MSGS_FULL_SIZE] bs,
+	  #[secret] stack u8[MZD_SIZE] v,
+	  #[public] reg u64 pos
+) -> stack u8[MZD_SIZE]
+{
+	reg u64 t;
+	inline int i;
+
+	for i=0 to MZD_U64_SIZE-1
+	{
+		t = bs.[:u64 pos];
+		t = #BSWAP_64(t);
+		v[:u64 MZD_U64_SIZE - 2 - i] = t;
+
+		pos += 8;
+
+	}
+
+	return v;
+}
+
+inline fn __mzd_to_bitstream_msgs(
+	  #[secret] reg ptr u8[MSGS_FULL_SIZE] bs,
+	  #[secret] stack u8[MZD_SIZE] v,
+	  #[public] reg u64 pos
+) -> reg ptr u8[MSGS_FULL_SIZE]
+{
+	reg u64 t;
+	inline int i;
+
+	for i=0 to MZD_U64_SIZE-1
+	{
+		t = v[:u64 MZD_U64_SIZE - 2 - i];
+		t = #BSWAP_64(t);
+		bs.[:u64 pos] = t;
+
+		pos += 8;
+	}
+
+	return bs;
+}
+
+fn _mzd_from_bitstream(
+	  #[secret] reg ptr u8[TAPES_FULL_SIZE] bs,
+	  #[secret] reg ptr u8[MZD_SIZE] v,
+	  #[public] reg u64 pos
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 t;
+	inline int z;
+
+	for z=0 to 3
+	{
+		t = bs.[:u64 (uint)pos + z * 8];
+		t = #BSWAP_64(t);
+		v[:u64 2 - z] = t;
+	}
+
+	return v;
+}
+
+inline fn __mzd_from_bitstream(
+	  #[secret] reg ptr u8[TAPES_FULL_SIZE] bs,
+	  #[secret] stack u8[MZD_SIZE] v,
+	  #[public] reg u64 pos
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	a = _mzd_from_bitstream(bs,a,pos);
+	v = a;
+
+	return v;
+}
+
+fn _mzd_to_bitstream(
+	  #[secret] reg ptr u8[TAPES_FULL_SIZE] bs,
+	  #[secret] reg ptr u8[MZD_SIZE] v,
+	  #[public] reg u64 pos
+) -> reg ptr u8[TAPES_FULL_SIZE]
+{
+	reg u64 t;
+	inline int z;
+
+	for z=0 to 3
+	{
+		t = v[:u64 2 - z];
+		t = #BSWAP_64(t);
+		bs.[:u64 (uint)pos + z * 8] = t;
+	}
+
+	return bs;
+}
+
+inline 
+fn __mzd_to_bitstream(
+	  #[secret] reg ptr u8[TAPES_FULL_SIZE] bs,
+	  #[secret] stack u8[MZD_SIZE] v,
+	  #[public] reg u64 pos
+) -> reg ptr u8[TAPES_FULL_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a;
+
+	a = v;
+	bs = _mzd_to_bitstream(bs,a,pos);
+	
+	return bs;
+}
+
+
+

@@ -1,0 +1,143 @@
+require "picnic3_tree.jinc"
+require "picnic3_tree_verify.jinc"
+
+inline
+fn __buildTree2(
+	#[secret] stack u8[TREE_NODES_2_SIZE * PNC_N_ROUNDS] seeds,
+	#[public] stack u8[TREE_NUM_NODES_2 * PNC_N_ROUNDS] seeds_have,
+	#[public] stack u8[TREE_NUM_NODES_2 * PNC_N_ROUNDS] seeds_exists,
+	  #[secret] stack u8[TREE_NODES_1_SIZE] iSeedsTree,
+	#[secret] 		  stack u8[PNC_SALT_SIZE] salt, 
+	#[public] 		  reg u64 round
+) -> stack u8[TREE_NODES_2_SIZE * PNC_N_ROUNDS], stack u8[TREE_NUM_NODES_2 * PNC_N_ROUNDS], 
+     stack u8[TREE_NUM_NODES_2 * PNC_N_ROUNDS]
+{
+	reg u64 idx0 idx1;
+
+	reg ptr u8[PNC_SALT_SIZE] reg_salt;
+	reg ptr u8[TREE_NODES_2_SIZE] reg_seeds;
+	reg ptr u8[TREE_NODES_1_SIZE] reg_iSeedsTree;
+	reg ptr u8[TREE_NUM_NODES_2] reg_seeds_have, reg_seeds_exists;
+	
+	idx0 = round;
+	idx0 *= TREE_NODES_2_SIZE;
+	idx1 = round;
+	idx1 *= TREE_NUM_NODES_2;
+
+	reg_salt = salt;
+	reg_iSeedsTree = iSeedsTree;
+	reg_seeds = seeds[idx0: TREE_NODES_2_SIZE];
+	reg_seeds_have = seeds_have[idx1: TREE_NUM_NODES_2];
+	reg_seeds_exists = seeds_exists[idx1: TREE_NUM_NODES_2];
+
+	() = #spill(idx0, idx1);
+
+	reg_seeds, reg_seeds_have, reg_seeds_exists
+		= _buildTree2(reg_seeds, reg_seeds_have, reg_seeds_exists, reg_iSeedsTree, reg_salt, round);
+
+	() = #unspill(idx0, idx1);
+	seeds[idx0: TREE_NODES_2_SIZE] = reg_seeds;
+	seeds_have[idx1: TREE_NUM_NODES_2] = reg_seeds_have;
+	seeds_exists[idx1: TREE_NUM_NODES_2] = reg_seeds_exists;
+
+	return seeds, seeds_have, seeds_exists;
+}
+
+inline
+fn __openMerkleTree(
+	#[poly=tree] stack u8[TREE_NODES_3_SIZE] tree,
+	#[public]    stack u64[REVEALED_SIZE] revealed,
+	#[public]    reg u64 revealedSize,
+	#[public]    reg u64 sig
+) -> reg u64
+{
+
+	reg ptr u8[TREE_NODES_3_SIZE] a;
+	reg ptr u64[REVEALED_SIZE] b;
+
+	a = tree;
+	b = revealed;
+	sig = _openMerkleTree(a, b, revealedSize, sig);
+
+	return sig;
+}
+
+inline 
+fn __revealSeeds(
+	#[poly=tree] stack u8[TREE_NODES_1_SIZE] tree,
+	#[public]    stack u8[TREE_NUM_NODES_1] tree_exists,
+	#[public]    stack u8[SIG_CHALLENGE_C_SIZE] challengeC,
+	#[public]    reg u64 signature
+) -> reg u64
+{
+	reg ptr u8[TREE_NODES_1_SIZE] a;
+	reg ptr u8[TREE_NUM_NODES_1] b;
+	reg ptr u8[SIG_CHALLENGE_C_SIZE] c;
+
+	a = tree;
+	b = tree_exists;
+	c = challengeC;
+	signature = _revealSeeds(a,b,c,signature);
+
+	return signature;
+}
+
+inline 
+fn __revealSeeds_2(
+	#[poly=tree] stack u8[TREE_NODES_2_SIZE] tree,
+	#[public]    stack u8[TREE_NUM_NODES_2] tree_exists,
+	#[public]    reg u64 sig,
+	#[public]    reg u16 hideList
+) -> reg u64
+{
+	
+	reg ptr u8[TREE_NODES_2_SIZE] a;
+	reg ptr u8[TREE_NUM_NODES_2] b;
+
+	a = tree;
+	b = tree_exists;
+	sig = _revealSeeds_2(a, b, sig, hideList);
+
+	return sig;
+}
+
+inline 
+fn __generateSeeds(
+	stack u8[TREE_NODES_2_SIZE] tree,
+	stack u8[TREE_NUM_NODES_2] tree_have,
+	stack u8[TREE_NUM_NODES_2] tree_exists,
+	stack u8[TREE_NODES_1_SIZE] iSeedsTree,
+	stack u8[PNC_SALT_SIZE] salt,
+	reg 	u16 round_u16,
+	reg 	u64 round
+) -> stack u8[TREE_NODES_2_SIZE], stack u8[TREE_NUM_NODES_2], stack u8[TREE_NUM_NODES_2]
+{
+	
+	reg ptr u8[TREE_NODES_2_SIZE] a;
+	reg ptr u8[TREE_NUM_NODES_2] b c;
+	reg ptr u8[TREE_NODES_1_SIZE] d;
+	reg ptr u8[PNC_SALT_SIZE] e;
+
+	a = tree;
+	b = tree_have;
+	c = tree_exists;
+	d = iSeedsTree;
+	e = salt;
+
+	a,b,c = _generateSeeds(a,b,c,d,e,round_u16,round);
+	tree = a;
+	tree_have = b;
+	tree_exists = c;
+
+
+	return tree, tree_have, tree_exists;
+}
+
+
+
+
+
+
+
+
+

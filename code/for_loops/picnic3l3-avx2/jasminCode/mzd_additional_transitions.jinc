@@ -1,0 +1,310 @@
+require "mzd_additional.jinc"
+
+
+inline
+fn __mzd_copy_uint64_192(
+	#[poly=y] stack u8[MZD_SIZE] x,
+	#[poly=y] stack u8[MZD_SIZE] y
+) -> stack u8[MZD_SIZE]
+{
+
+	reg ptr u8[MZD_SIZE] a b;
+
+	a = x;
+	b = y;
+	a = _mzd_copy_uint64_192(a,b);
+	x = a;
+	
+	return x;
+}
+/*
+inline
+fn __mzd_copy_uint64_192_v2(
+	  stack u8[MZD_SIZE] x,
+	  reg ptr u8[MZD_SIZE] y
+) -> stack u8[MZD_SIZE]
+{
+
+	reg ptr u8[MZD_SIZE] a;
+	
+	a = x;
+	a = _mzd_copy_uint64_192(a,y);
+	x = a;
+
+	return x;
+}
+*/
+inline
+fn __mzd_copy_uint64_192_v3(
+	#[poly=y] reg ptr u8[MZD_SIZE] x,
+	#[poly=y] stack u8[MZD_SIZE] y
+) -> reg ptr u8[MZD_SIZE]
+{
+
+	reg ptr u8[MZD_SIZE] a;
+	
+	a = y;
+
+	x = _mzd_copy_uint64_192(x,a);
+	
+	return x;
+}
+
+inline
+fn __mzd_xor_uint64_block(
+	#[secret] stack u8[MZD_SIZE] r_block_j,
+	#[secret] stack u8[MZD_SIZE] f_block_j,
+	#[secret] stack u8[MZD_SIZE] s_block_j
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b,c;
+
+	a = r_block_j;
+	b = f_block_j;
+	c = s_block_j; 
+
+	a = _mzd_xor_uint64_block(a,b,c);
+
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+inline
+fn __mzd_xor_uint64_block_v2(
+	#[poly=r_block_j] reg ptr u8[MZD_SIZE] r_block_j,
+	#[poly=f_block_j] stack u8[MZD_SIZE] f_block_j,
+	#[poly=s_block_j] stack u8[MZD_SIZE] s_block_j
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b,c;
+
+	a = r_block_j;
+	b = f_block_j;
+	c = s_block_j; 
+
+	a = _mzd_xor_uint64_block(a,b,c);
+
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+inline
+fn __mzd_xor_uint64_block_v3(
+	#[poly=r_block_j] stack u8[MZD_SIZE] r_block_j,
+	#[poly=f_block_j] stack u8[MZD_SIZE] f_block_j,
+	#[poly=s_block_j] reg ptr u8[MZD_SIZE] s_block_j
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b,c;
+
+	a = r_block_j;
+	b = f_block_j;
+	c = s_block_j; 
+
+	a = _mzd_xor_uint64_block(a,b,c);
+
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+inline
+fn __mzd_and_uint64_block(
+	#[secret] stack u8[MZD_SIZE] r_block_j,
+	#[secret] stack u8[MZD_SIZE] f_block_j,
+	#[secret] stack u8[MZD_SIZE] s_block_j
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b,c;
+
+	a = r_block_j;
+	b = f_block_j;
+	c = s_block_j; 
+
+	a = _mzd_and_uint64_block(a,b,c);
+
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+inline
+fn __mzd_shift2_left_uint64_192(
+	#[poly=block] stack u8[MZD_SIZE] r_block_j,
+	#[poly=block] stack u8[MZD_SIZE] block
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b;
+
+	a = r_block_j;
+	b = block;
+	a = _mzd_shift2_left_uint64_192(a,b);
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+inline
+fn __mzd_shift1_left_uint64_192(
+	#[poly=block] stack u8[MZD_SIZE] r_block_j,
+	#[poly=block] stack u8[MZD_SIZE] block
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b;
+
+	a = r_block_j;
+	b = block;
+
+	a = _mzd_shift1_left_uint64_192(a,b);
+
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+inline
+fn __mzd_shift2_right_uint64_192(
+	#[poly=block] stack u8[MZD_SIZE] r_block_j,
+	#[poly=block] stack u8[MZD_SIZE] block
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b;
+
+	a = r_block_j;
+	b = block;
+
+	a = _mzd_shift2_right_uint64_192(a,b);
+
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+inline
+fn __mzd_shift1_right_uint64_192(
+	#[poly=block] stack u8[MZD_SIZE] r_block_j,
+	#[poly=block] stack u8[MZD_SIZE] block
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a,b;
+
+	a = r_block_j;
+	b = block;
+
+	a = _mzd_shift1_right_uint64_192(a,b);
+
+	r_block_j = a;
+
+	return r_block_j;
+}
+
+inline
+fn __mzd_addmul_v_uint64_192(
+	#[secret] stack u8[MZD_SIZE] c_block vptr,
+	#[secret] stack u64[MATRIX_ROUND] a_block
+) ->  stack u8[MZD_SIZE]
+{
+
+	reg ptr u8[MZD_SIZE] a b;
+	reg ptr u64[MATRIX_ROUND] c;
+	
+	a = c_block;
+	b = vptr;
+	c = a_block;
+
+	a = _mzd_addmul_v_uint64_192(a,b,c);
+
+	c_block = a;
+
+	return c_block;
+}
+
+inline
+fn __mzd_addmul_v_uint64_192_v2(
+	 stack u8[MZD_SIZE] c_block,
+	 reg ptr u8[MZD_SIZE] vptr,
+	 stack u64[MATRIX_ROUND] a_block
+) ->  stack u8[MZD_SIZE]
+{
+
+	reg ptr u8[MZD_SIZE] a;
+	reg ptr u64[MATRIX_ROUND] c;
+	
+	a = c_block;
+	c = a_block;
+
+	a = _mzd_addmul_v_uint64_192(a,vptr,c);
+	c_block = a;
+
+	return c_block;
+}
+
+inline
+fn __mzd_mul_v_uint64_192(
+	#[secret] stack u8[MZD_SIZE] c_block,
+	#[secret] stack u8[MZD_SIZE] vptr,
+	#[secret] stack u64[MATRIX_ROUND] k_matrix_
+) -> stack u8[MZD_SIZE]
+{
+
+	reg u256 t;
+
+	reg ptr u8[MZD_SIZE] a b;
+	reg ptr u64[MATRIX_ROUND] c;
+
+	a = c_block;
+	b = vptr;
+	c = k_matrix_;
+
+	t = #set0_256();
+	a[:u256 0] = t;
+
+	a = _mzd_addmul_v_uint64_192(a,b,c);
+
+	c_block = a;
+
+	return c_block;
+}
+
+inline
+fn __mzd_mul_v_uint64_192_v2(
+	stack u8[MZD_SIZE] c_block,
+	reg ptr u8[MZD_SIZE] vptr,
+	stack u64[MATRIX_ROUND] k_matrix_
+) -> stack u8[MZD_SIZE]
+{
+	reg u256 ymm0;
+	reg ptr u8[MZD_SIZE] a;
+	reg ptr u64[MATRIX_ROUND] c;
+
+	a = c_block;
+	c = k_matrix_;
+
+	ymm0 = #set0_256();
+	a[:u256 0] = ymm0;
+
+	a = _mzd_addmul_v_uint64_192(a,vptr,c);
+
+	c_block = a;
+
+	return c_block;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

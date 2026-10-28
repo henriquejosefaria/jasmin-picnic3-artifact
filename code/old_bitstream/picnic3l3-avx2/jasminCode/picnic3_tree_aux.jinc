@@ -1,0 +1,2062 @@
+
+inline
+fn _exists_1(
+  #[public] reg ptr u8[TREE_NUM_NODES_1] tree,
+  #[public] reg u64 idx,
+  #[public] reg u8 t
+) -> reg u8
+{
+  t = 0;
+  if(idx < TREE_NUM_NODES_1)
+  {
+    t = tree[idx];
+  }
+
+  return t;
+}
+
+inline
+fn _exists_1_v2(
+  #[public] reg ptr u8[TREE_NUM_NODES_1] tree,
+  #[public] reg u64 idx,
+  #[public] reg u8 t
+) -> reg u8
+{
+  t = 0;
+  if(idx < TREE_NUM_NODES_1-1)
+  {
+    t = tree[idx];
+  }
+
+  return t;
+}
+
+fn __exists_2_v1(
+	#[public] reg ptr u8[FULL_TREE_SIZE_2] tree,
+	#[public] reg u64 idx,
+	#[public] reg u8 t
+) -> reg u8
+{
+
+	t = 0;
+	if(idx < TREE_NUM_NODES_2)
+	{
+		t = tree[TREE_EXISTS_2 + idx];
+	}
+
+	return t;
+}
+
+fn __exists_2(
+  #[public] reg ptr u8[TREE_NUM_NODES_2] tree,
+  #[public] reg u64 idx,
+  #[public] reg u8 t
+) -> reg u8
+{
+
+  t = 0;
+  if(idx < TREE_NUM_NODES_2)
+  {
+    t = tree[idx];
+  }
+
+  return t;
+}
+
+fn __exists_22(
+  #[public] reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] tree,
+  #[public] reg u64 idx,
+  #[public] reg u8 t
+) -> reg u8
+{
+
+  t = 0;
+  if(idx < PNC_N_ROUNDS * TREE_NUM_NODES_2)
+  {
+    t = tree[idx];
+  }
+
+  return t;
+}
+
+inline
+fn __exists_3(
+  #[public] reg ptr u8[TREE_NUM_NODES_3] tree,
+  #[public] reg u64 idx,
+  #[public] reg u8 t
+) -> reg u8
+{
+  
+  t = 0;
+  if(idx < TREE_NUM_NODES_3)
+  {
+    t = tree[idx];
+  }
+
+  return t;
+}
+
+inline
+fn _getParent(  #[public] reg u64 node) -> reg u64
+{
+
+  if(node != 0){
+  	  node += 1;
+  	  node >>= 1;
+  	  node -= 1;
+  }
+
+  return node;	  
+}
+
+inline
+fn _getParent_u16(  #[public] reg u16 node) -> reg u16
+{
+
+  if(node != 0){
+      node += 1;
+      node >>= 1;
+      node -= 1;
+  }
+
+  return node;    
+}
+
+fn __hasRightChild_T1_v2(
+  #[public] reg ptr u8[TREE_NUM_NODES_1] tree,
+  #[public] reg u64 node
+) -> reg u8
+{
+  reg u8 t8;
+  reg u64 t t64;
+
+  t64 = 0;
+
+  t = node;
+  t <<= 1;
+  t += 2;
+  if(t < TREE_NUM_NODES_1)
+  {
+    t8 = _exists_1_v2(tree, node, t8);
+  } 
+  else { t8 = 0; }
+
+  t8 = t8;
+  return t8;
+}
+
+fn __hasRightChild_T2(
+  #[public] reg ptr u8[TREE_NUM_NODES_2] tree,
+  #[public] reg u64 node
+) -> reg u8
+{
+  reg u8 t8;
+  reg u64 t t64;
+
+  t64 = 0;
+
+  t = node;
+  t <<= 1;
+  t += 2;
+  if(t < TREE_NUM_NODES_2)
+  {
+    t8 = __exists_2(tree, node, t8);
+  } 
+  else { t8 = 0; }
+
+  t8 = t8;
+  return t8;
+}
+
+
+inline
+fn _contains(
+  #[public] reg ptr u64[REVEALED_SIZE] revealed,
+  #[public] reg u64 len,
+  #[public] reg u64 value
+) -> reg u8
+{
+  reg u8 res;
+  reg u64 i t64;
+  
+  res = 0;
+  i=0;
+  while(i < len)
+  {
+    t64 = revealed[i];
+    if(t64 == value) { res = 1; }
+
+    i += 1;
+  }
+  
+  return res;
+}
+
+inline
+fn _contains_2(
+  #[public] stack u64[REVEALED_SIZE_2] revealed,
+  #[public] reg u64 len,
+  #[public] reg u64 value
+) -> reg u8
+{
+  reg u8 res;
+  reg u64 i t64;
+  
+  res = 0;
+  i=0;
+  while(i < len)
+  {
+    t64 = revealed[i];
+    if(t64 == value) { res = 1; }
+
+    i += 1;
+  }
+  
+  return res;
+}
+
+
+fn _contains_pathSets(
+  #[public] reg ptr u16[PNC_N_ROUNDS * (TREE_DEPTH_1 - 1)] pathSet,
+  #[public] reg u64 value,
+  #[public] reg u64 offset
+) -> reg u8
+{
+  reg u8 res;
+  reg u16 t16;
+  reg u64 i t64;
+  
+  res = 0;
+  i=0;
+  while(i < PNC_N_OPENED_ROUNDS)
+  {
+    t16 = pathSet[offset];
+    t64 = (64u) t16;
+    if(t64 == value) { res = 1; }
+
+    offset += 1;
+    i += 1;
+  }
+  
+  return res;
+}
+
+inline fn __contains_pathSets(
+  #[public] stack u16[PNC_N_ROUNDS * (TREE_DEPTH_1 - 1)] pathSet,
+  #[public] reg u64 value,
+  #[public] reg u64 offset
+) -> reg u8
+{
+  reg u8 res;
+  reg ptr u16[PNC_N_ROUNDS * (TREE_DEPTH_1 - 1)] a;
+
+  a = pathSet;
+  res = _contains_pathSets(a, value, offset);
+
+  return res;
+}
+
+fn _contains_pathSets_2(
+  #[public] reg ptr u16[TREE_DEPTH_2 - 1] pathSet,
+  #[public] reg u64 value,
+  #[public] reg u64 offset
+) -> reg u8
+{
+  reg u8 res;
+  reg u16 t16;
+  reg u64 i t64;
+  
+  res = 0;
+  i=0;
+  while(i < 1)
+  {
+    t16 = pathSet[offset];
+    t64 = (64u) t16;
+    if(t64 == value) { res = 1; }
+
+    offset += 1;
+    i += 1;
+  }
+  
+  return res;
+}
+
+inline fn __contains_pathSets_2(
+  #[public] stack u16[TREE_DEPTH_2 - 1] pathSet,
+  #[public] reg u64 value,
+  #[public] reg u64 offset
+) -> reg u8
+{
+  reg u8 res;
+  reg ptr u16[TREE_DEPTH_2 - 1] a;
+
+  a = pathSet;
+  
+  res = _contains_pathSets_2(a, value, offset);
+
+  return res;
+}
+
+fn __isLeftChild(
+  #[public] reg u64 node
+) -> reg u8
+{
+  reg u8 t;
+  reg u64 node2;
+
+  node2 = node;
+  node2 &= 0x01;
+
+  if(node2 == 1) { t = 1; }
+  else { t = 0; }
+
+  return t;
+}
+
+fn __hasSibling(
+  #[public] reg ptr u8[TREE_NUM_NODES_1] tree,
+  #[public] reg u64 s_node
+) -> reg u8
+{
+  reg u8 t8;
+  reg u64 node;
+
+  node = s_node;
+
+  t8 = _exists_1(tree, node, t8);
+  
+  if(t8 == 1)
+  {
+    t8 = __isLeftChild(node);
+
+    if(t8 == 1)
+    {
+      node += 1;
+      t8 = _exists_1(tree, node, t8);
+      if(t8 == 0)
+      {
+        t8 = 0;
+      } 
+      else
+      {
+        t8 = 1;
+      }
+    }
+    else
+    {
+      t8 = 1;
+    } 
+  }
+  else
+  {
+    t8 = 0;
+  }
+
+  return t8;
+}
+
+fn __hasSibling_2(
+  #[public] reg ptr u8[TREE_NUM_NODES_2] tree,
+  #[public] reg u64 s_node
+) -> reg u8
+{
+  reg u8 t8;
+  reg u64 node;
+
+  node = s_node;
+
+  t8 = __exists_2(tree, node, t8);
+  
+  if(t8 == 1)
+  {
+    t8 = __isLeftChild(node);
+
+    if(t8 == 1)
+    {
+      node += 1;
+      t8 = __exists_2(tree, node, t8);
+      if(t8 == 0)
+      {
+        t8 = 0;
+      } 
+      else
+      {
+        t8 = 1;
+      }
+    }
+    else
+    {
+      t8 = 1;
+    } 
+  }
+  else
+  {
+    t8 = 0;
+  }
+
+  return t8;
+}
+
+fn __getSibling(
+  #[public] reg u64 node
+) -> reg u64
+{
+
+  reg u8 t8;
+
+  t8 = __isLeftChild(node);
+
+  if(t8 == 1)
+  {
+    node += 1;
+    if(node >= TREE_NUM_NODES_1) { node = 0; }
+  } 
+  else
+  {
+    node -= 1;
+  }
+
+
+  
+  return node;
+}
+
+fn __getSibling_2(
+  #[public] reg u64 node
+) -> reg u64
+{
+
+  reg u8 t8;
+
+  t8 = __isLeftChild(node);
+
+  if(t8 == 1)
+  {
+    node += 1;
+    if(node >= TREE_NUM_NODES_2) {node = 0;}
+
+  } 
+  else
+  { 
+    node -= 1;
+  }
+  
+  return node;
+}
+
+fn __isLeafNode(
+  #[public] reg u64 sibling
+) -> reg u8
+{
+  reg u8 t;
+  reg u64 aux;
+  
+  aux = sibling;
+  aux <<= 1;
+  aux += 1;
+
+  if(aux > TREE_NUM_NODES_1) { t = 1; }
+  else { t = 0; }
+  
+  return t;
+}
+
+
+fn __isLeafNode_2(
+  #[public] reg u64 sibling
+) -> reg u8
+{
+  reg u8 t;
+  reg u64 aux;
+  
+  aux = sibling;
+  aux <<= 1;
+  aux += 1;
+
+  if(aux > TREE_NUM_NODES_2) { t = 1; }
+  else { t = 0; }
+  
+  return t;
+}
+
+#[returnaddress="stack"]
+fn _createTree_1(
+  #[poly=tree]  reg ptr u8[TREE_NODES_1_SIZE] tree,
+  #[public]     reg ptr u8[TREE_NUM_NODES_1] tree_have,
+  #[public]     reg ptr u8[TREE_NUM_NODES_1] tree_exists
+) -> reg ptr u8[TREE_NODES_1_SIZE], reg ptr u8[TREE_NUM_NODES_1], reg ptr u8[TREE_NUM_NODES_1]
+{
+  
+  reg u8 t8;
+  reg u256 t;
+  reg u64 x y z;
+
+  /* Seetting arrays haveNode and exists to zero */
+
+  t = #set0_256();
+  x = 0;
+  y = TREE_NUM_NODES_1;
+  y -= 2; 
+  while(x < y)
+  {
+    tree_have.[:u256 x] = t;
+    tree_exists.[:u256 x] = t;
+    x += 32;
+  }
+  tree_have.[:u16 x] = 0; // Setting the last 2 nodes to 0
+  tree_exists.[:u16 x] = 0; // Setting the last 2 nodes to 0
+  
+  x = 0;
+  y = TREE_NODES_1_SIZE;
+  y -= 16;
+  while(x < y)
+  {
+    tree.[:u256 x] = t;
+    x += 32;
+  }
+  tree.[:u64 x] = 0;
+  tree.[:u64 x + 8] = 0;
+
+  /* Depending on the number of leaves, the tree may not be complete */
+
+  x = TREE_NUM_NODES_1;
+  x -= TREE_NUM_LEAVES_1;
+  y = TREE_NUM_NODES_1;
+
+  while(x < y) /* Set leaves */
+  {
+    tree_exists[x] = 1;
+    x += 1;
+  }  
+
+  x = TREE_NUM_NODES_1;
+  x -= TREE_NUM_LEAVES_1;
+  while(x > 0)
+  {
+    z = x;
+    z <<= 1;
+    z += 1;
+
+    t8 = _exists_1(tree_exists, z, t8);
+
+    if (t8 == 1){
+
+      tree_exists[ x] = 1;
+
+    } else
+    {
+      z += 1;
+
+      t8 = _exists_1(tree_exists, z, t8);
+
+      if (t8 == 1){
+        tree_exists[ x] = 1;
+      }
+    }
+    
+    x -= 1;
+  }
+  tree_exists[0] = 1;
+
+  return tree, tree_have, tree_exists;
+}
+
+inline fn __createTree_1(
+  #[poly=tree] stack u8[TREE_NODES_1_SIZE] tree,
+  #[public]    stack u8[TREE_NUM_NODES_1] tree_have,
+  #[public]    stack u8[TREE_NUM_NODES_1] tree_exists
+) -> stack u8[TREE_NODES_1_SIZE], stack u8[TREE_NUM_NODES_1], stack u8[TREE_NUM_NODES_1]
+{
+  reg ptr u8[TREE_NODES_1_SIZE] a;
+  reg ptr u8[TREE_NUM_NODES_1] b;
+  reg ptr u8[TREE_NUM_NODES_1] c;
+
+  a = tree;
+  b = tree_have;
+  c = tree_exists;
+  a,b,c = _createTree_1(a,b,c);
+  tree = a;
+  tree_have = b;
+  tree_exists = c;
+
+  return tree, tree_have, tree_exists;
+}
+
+
+
+
+
+
+#[returnaddress="stack"]
+fn _createTree_2(
+  #[poly=tree]      reg ptr u8[TREE_NODES_2_SIZE] tree,
+  #[poly=tree_have] reg ptr u8[TREE_NUM_NODES_2] tree_have,
+  #[public]         reg ptr u8[TREE_NUM_NODES_2] tree_exists
+) -> reg ptr u8[TREE_NODES_2_SIZE], reg ptr u8[TREE_NUM_NODES_2], reg ptr u8[TREE_NUM_NODES_2]
+{
+  
+  reg u8 t8;
+  reg u64 x y z;
+
+  /* Seetting arrays haveNode and exists to zero */
+
+  
+  x = 0;
+  y = TREE_NUM_NODES_2; // y = 31
+  while(x < y)
+  { tree_have[x] = 0; tree_exists[x] = 0; x += 1; }
+
+
+
+  /* Depending on the number of leaves, the tree may not be complete */
+
+  
+  x = TREE_NUM_NODES_2;
+  x -= TREE_NUM_LEAVES_2;
+  y = TREE_NUM_NODES_2;
+
+  
+  while(x < y) /* Set leaves */
+  {
+    tree_exists[x] = 1;
+    x += 1;
+  }
+  
+  
+  
+  x = TREE_NUM_NODES_2;
+  x -= TREE_NUM_LEAVES_2;
+  while(x > 0)
+  {
+    z = x;
+    z <<= 1;
+    z += 1;
+
+    t8 = __exists_2(tree_exists, z, t8);
+
+    if (t8 == 1){
+
+      tree_exists[ x] = 1;
+
+    } else
+    {
+      z += 1;
+
+      t8 = __exists_2(tree_exists, z, t8);
+
+      if (t8 == 1){
+        tree_exists[ x] = 1;
+      }
+    }
+    
+    x -= 1;
+  }
+  tree_exists[0] = 1;
+  
+  return tree, tree_have, tree_exists;
+}
+
+inline fn __createTree_2(
+  #[poly=tree]      stack u8[TREE_NODES_2_SIZE] tree,
+  #[poly=tree_have] stack u8[TREE_NUM_NODES_2] tree_have,
+  #[public]         stack u8[TREE_NUM_NODES_2] tree_exists
+) -> stack u8[TREE_NODES_2_SIZE], stack u8[TREE_NUM_NODES_2], stack u8[TREE_NUM_NODES_2]
+{
+  reg ptr u8[TREE_NODES_2_SIZE] a;
+  reg ptr u8[TREE_NUM_NODES_2] b;
+  reg ptr u8[TREE_NUM_NODES_2] c;
+
+  a = tree;
+  b = tree_have;
+  c = tree_exists;
+  a,b,c = _createTree_2(a,b,c);
+  tree = a;
+  tree_have = b;
+  tree_exists = c;
+
+  return tree, tree_have, tree_exists;
+}
+
+
+inline fn __createTree_22(
+  #[poly=tree]      stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] tree,
+  #[poly=tree_have] stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] tree_have,
+  #[public]         stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] tree_exists
+) -> stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE], stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2], stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2]
+{
+  reg u8 t8;
+  reg u64 x y z offset;
+  reg u256 t;
+
+  stack u64 s_x s_z s_offset;
+
+  reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] reg_tree_exists;
+
+  /* Setting arrays haveNode and exists to zero */
+    
+  t = #set0_256();
+  y = PNC_N_ROUNDS * TREE_NUM_NODES_2; // y = PNC_N_ROUNDS * 31
+  y -= 7;
+
+  x = 0;
+  while(x < y)
+  { tree_have.[:u256 x] = t; x += 32; }
+  tree_have.[:u32 x] = 0; x += 4;
+  tree_have.[:u16 x] = 0; x += 2;
+  tree_have.[:u8 x] = 0;
+
+  x = 0;
+  while(x < y)
+  { tree_exists.[:u256 x] = t; x += 32; }
+  tree_exists.[:u32 x] = 0; x += 4;
+  tree_exists.[:u16 x] = 0; x += 2;
+  tree_exists.[:u8 x] = 0;
+
+  /* Depending on the number of leaves, the tree may not be complete */
+
+  z = PNC_N_ROUNDS - 1;
+  while(z > 0)
+  {
+    offset = z * TREE_NUM_NODES_2;
+    s_z = z;
+
+    x = offset;
+    y = offset;
+    s_offset = offset;
+
+    y += TREE_NUM_NODES_2;
+    y -= 1;
+    x += GET_LEAVES_2;
+    /* Set leaves */
+    while(y > x)
+    {
+      tree_exists[y] = 1;
+      y -= 1;
+    }
+
+    x = GET_LEAVES_2;
+
+    /* Set intermediate nodes */
+    while(x > 0)
+    {
+      s_x = x;
+
+      y = x;
+      y <<= 1;
+      y += 1;
+      y += s_offset;
+
+
+      t8 = 0;
+      reg_tree_exists = tree_exists;
+      t8 = __exists_22(reg_tree_exists, y, t8);
+
+      if (t8 == 1){
+        x = s_offset;
+        x += s_x;
+        tree_exists[x] = 1;
+      } else
+      {
+        y += 1;
+
+        reg_tree_exists = tree_exists;
+        t8 = __exists_22(reg_tree_exists, y, t8);
+
+        if (t8 == 1){
+          x = s_offset;
+          x += s_x;
+          tree_exists[x] = 1;
+        }
+      }
+
+      x = s_x;
+      x -= 1;
+    }
+    x += s_offset;
+    tree_exists[x] = 1;
+
+    z = s_z;
+    z -= 1;
+  }
+
+  y = TREE_NUM_NODES_2;
+  y -= 1;
+  x = GET_LEAVES_2;
+  /* Set leaves */
+  while(y > x)
+  {
+    tree_exists[y] = 1;
+    y -= 1;
+  }
+
+  /* Set intermediate nodes */
+  while(x > 0)
+  {
+    s_x = x;
+
+    y = x;
+    y <<= 1;
+    y += 1;
+
+    t8 = 0;
+    reg_tree_exists = tree_exists;
+    t8 = __exists_22(reg_tree_exists, y, t8);
+
+    if (t8 == 1){
+      x = s_x;
+      tree_exists[x] = 1;
+    } else
+    {
+      y += 1;
+
+      reg_tree_exists = tree_exists;
+      t8 = __exists_22(reg_tree_exists, y, t8);
+
+      if (t8 == 1){
+        x = s_x;
+        tree_exists[x] = 1;
+      }
+    }
+
+    x = s_x;
+    x -= 1;
+  }
+  tree_exists[x] = 1;
+
+
+  z = 0;
+  while(z < PNC_N_ROUNDS)
+  {
+    x = z * TREE_NUM_NODES_2;
+    tree_have[x] = 1;
+
+    z += 1;
+  }
+
+  return tree, tree_have, tree_exists;
+}
+
+#[returnaddress="stack"]
+fn _createTree_3(
+  #[poly=tree]       reg ptr u8[TREE_NODES_3_SIZE] tree,
+  #[poly=tree_have]  reg ptr u8[TREE_NUM_NODES_3] tree_have,
+  #[public]          reg ptr u8[TREE_NUM_NODES_3] tree_exists
+) -> reg ptr u8[TREE_NODES_3_SIZE], reg ptr u8[TREE_NUM_NODES_3], reg ptr u8[TREE_NUM_NODES_3]
+{
+  
+  reg u8 t8;
+  reg u256 t;
+  reg u64 x y z;
+
+  /* Seetting arrays haveNode and exists to zero */
+
+  t = #set0_256();
+  x = 0;
+  y = TREE_NUM_NODES_3;
+  y -= 2; 
+  while(x < y)
+  {
+    tree_have.[:u256 x] = t;
+    tree_exists.[:u256 x] = t;
+    x += 32;
+  }
+  tree_have.[:u16 x] = 0; // Setting the last 2 nodes to 0
+  tree_exists.[:u16 x] = 0; // Setting the last 2 nodes to 0
+
+  /* Depending on the number of leaves, the tree may not be complete */
+
+  x = TREE_NUM_NODES_3;
+  x -= TREE_NUM_LEAVES_3;
+  y = TREE_NUM_NODES_3;
+
+  while(x < y) /* Set leaves */
+  {
+    tree_exists[x] = 1;
+    x += 1;
+  }  
+
+  x = TREE_NUM_NODES_3;
+  x -= TREE_NUM_LEAVES_3;
+  while(x > 0)
+  {
+    z = x;
+    z <<= 1;
+    z += 1;
+
+    t8 = __exists_3(tree_exists, z, t8);
+
+    if (t8 == 1){
+
+      tree_exists[ x] = 1;
+
+    } else
+    {
+      z += 1;
+
+      t8 = __exists_3(tree_exists, z, t8);
+
+      if (t8 == 1){
+        tree_exists[ x] = 1;
+      }
+    }
+    
+    x -= 1;
+  }
+  tree_exists[0] = 1;
+  
+  return tree, tree_have, tree_exists;
+}
+
+inline fn __createTree_3(
+  #[poly=tree]      stack u8[TREE_NODES_3_SIZE] tree,
+  #[poly=tree_have] stack u8[TREE_NUM_NODES_3] tree_have,
+  #[public]         stack u8[TREE_NUM_NODES_3] tree_exists
+) -> stack u8[TREE_NODES_3_SIZE], stack u8[TREE_NUM_NODES_3], stack u8[TREE_NUM_NODES_3]
+{
+  reg ptr u8[TREE_NODES_3_SIZE] a;
+  reg ptr u8[TREE_NUM_NODES_3] b;
+  reg ptr u8[TREE_NUM_NODES_3] c;
+
+  a = tree;
+  b = tree_have;
+  c = tree_exists;
+  a,b,c = _createTree_3(a,b,c);
+  tree = a;
+  tree_have = b;
+  tree_exists = c;
+
+  return tree, tree_have, tree_exists;
+}
+
+#[returnaddress="stack"]
+fn _expandSeeds_1(
+  #[secret]        reg ptr u8[TREE_NODES_1_SIZE] tree,
+  #[public]        reg ptr u8[TREE_NUM_NODES_1] tree_have,
+  #[public]        reg ptr u8[TREE_NUM_NODES_1] tree_exists,
+  #[poly=salt]     reg ptr u8[PNC_SALT_SIZE] salt,
+  #[poly=repIndex] reg u16 repIndex
+) -> reg ptr u8[TREE_NODES_1_SIZE], reg ptr u8[TREE_NUM_NODES_1], reg ptr u8[TREE_NUM_NODES_1]
+{
+
+  stack u64 s_x s_y s_lastNonLeaf ;
+  stack u16 s_node_idx;
+  
+  reg u64 lastNonLeaf;
+  reg u64 x y z a b;
+  reg u16 node_idx;
+  reg u8  t8;
+
+  stack u8[4 * 2 * MAX_SEED_SIZE_BYTES] tmp;
+
+  reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] reg_tmp;
+
+  stack ptr u8[TREE_NUM_NODES_1] s_tree_have s_tree_exists;
+
+  () = #spill(tree);
+  () = #spill(tree_have);
+  () = #spill(tree_exists);
+  () = #spill(salt);
+  () = #spill(repIndex);
+
+  /* Walk the tree, expanding seeds where possible. Compute children of * non-leaf nodes. */
+
+    lastNonLeaf = TREE_NUM_NODES_1;
+    lastNonLeaf -= 1;
+    lastNonLeaf = _getParent(lastNonLeaf);
+
+    /* expand the first 4 seeds */
+  
+    x = 0;
+    y = 2;
+    node_idx = 0;
+    if(lastNonLeaf < y){ y = lastNonLeaf; }
+    s_lastNonLeaf = lastNonLeaf;
+
+    while( x <= y )
+    {
+
+      () = #unspill(tree_have);
+      t8 = tree_have[ x];
+      
+      if(t8 == 1)
+      { 
+        z = x;
+        z *= PNC_SEED_SIZE;
+        node_idx = x;
+
+        s_x = x;
+        s_y = y;
+        reg_tmp = tmp;
+        () = #unspill(tree, salt, repIndex);
+        reg_tmp = __hashSeed_1(reg_tmp, tree, salt, z, repIndex, node_idx);
+        tmp = reg_tmp;
+
+        y = s_y;
+        x = s_x;
+        z = x;
+        z <<= 1;
+        z += 1;
+        () = #unspill(tree_have);
+        t8 = tree_have[ z];
+        
+        if( t8 == 0)
+        {
+          /* left child = H_left(seed_i || salt || t || i) */
+
+          tree_have[z] = 1;
+          () = #spill(tree_have);
+
+          b = 0;
+          z *= PNC_SEED_SIZE;
+          reg_tmp = tmp;
+          () = #unspill(tree);
+          tree = __copy3Words_1(tree, reg_tmp, z, b);
+          () = #spill(tree);
+        }
+
+        /* The last non-leaf node will only have a left child when there are an odd number of leaves */
+        
+        z = x;
+        z <<= 1;
+        z += 2;
+
+        /*CHANGE EXISTS TO RECEIVE TREE_EXISTS !!!*/
+        () = #unspill(tree_exists);
+        t8 = _exists_1(tree_exists, z, t8);
+        if(t8 == 1)
+        {
+          () = #unspill(tree_have);
+          t8 = tree_have[z];
+
+          if(t8 == 0)
+          {
+            /* right child = H_right(seed_i || salt || t || i)  */
+
+            tree_have[z] = 1;
+            () = #spill(tree_have);
+
+            b = PNC_SEED_SIZE;
+            z *= PNC_SEED_SIZE;
+            reg_tmp = tmp;
+            () = #unspill(tree);
+            tree = __copy3Words_1(tree, reg_tmp, z, b);
+            () = #spill(tree);
+          }
+        }
+      }
+      x += 1;
+    }
+
+    /* now hash in groups of 4 for faster hashing */
+    y = s_lastNonLeaf;
+    y >>= 2;
+    y <<= 2;
+    while(x <= y)
+    {
+      node_idx = x;
+      z = x;
+      z *= PNC_SEED_SIZE;
+      s_x = x;
+      s_y = y;
+
+      s_tree_have = tree_have;
+      s_tree_exists = tree_exists;
+
+      () = #unspill(tree, salt, repIndex);
+      tmp = __hashSeed_x4_1(tmp, tree, salt, z, repIndex, node_idx);
+
+      tree_have = s_tree_have;
+      tree_exists = s_tree_exists;
+      () = #spill(tree_have);
+      () = #spill(tree_exists);
+
+      x = s_x; 
+      y = s_y;
+  
+      a = 0;
+      while(a < 4)
+      {
+        () = #unspill(tree_have);
+        t8 = tree_have[ x];
+
+        if(t8 == 1)
+        {
+          z = x;
+          z <<= 1;
+          z += 1;
+          t8 = tree_have[ z];
+
+          if(t8 == 0)
+          {
+            /* left child = H_left(seed_i || salt || t || j) */
+            
+            b = a;
+            b *= 2;
+            b *= MAX_SEED_SIZE_BYTES;
+            
+            () = #unspill(tree_have);
+            tree_have[z] = 1;
+            () = #spill(tree_have);
+
+            z *= PNC_SEED_SIZE; // Set index to pointer
+            reg_tmp = tmp;
+            () = #unspill(tree);
+            tree = __copy3Words_1(tree, reg_tmp, z, b);
+            () = #spill(tree);
+          }
+
+          z = x;
+          z <<= 1;
+          z += 2;
+
+          /* The last non-leaf node will only have a left child when there are an odd number of leaves */
+          () = #unspill(tree_exists);
+          t8 = _exists_1(tree_exists, z, t8);
+          
+          if(t8 == 1)
+          {
+            () = #unspill(tree_have);
+            t8 = tree_have[ z];
+            if(t8 == 0)
+            {
+              /* right child = H_right(seed_i || salt || t || j)  */
+
+              b = a;
+              b *= 2;
+              b *= MAX_SEED_SIZE_BYTES;
+              b += PNC_SEED_SIZE;
+              
+              tree_have[ z] = 1;
+              () = #spill(tree_have);
+
+              z *= PNC_SEED_SIZE; // Set index to pointer
+              reg_tmp = tmp;
+              () = #unspill(tree);
+              tree = __copy3Words_1(tree, reg_tmp, z, b);
+              () = #spill(tree);
+            }
+          }
+        }
+
+        a += 1;
+        x += 1;
+      }
+
+    }
+ 
+    /* handle last few, which are not a multiple of 4 */
+
+    y = s_lastNonLeaf;
+    while(x <= y)
+    {
+      () = #unspill(tree_have);
+      t8 = tree_have[ x];
+      
+      if(t8 == 1)
+      {
+        node_idx = x;
+        z = x;
+        z *= PNC_SEED_SIZE;
+        s_x = x;
+        s_y = y;
+
+        reg_tmp = tmp;
+        () = #unspill(tree, salt, repIndex);
+        reg_tmp = __hashSeed_1(reg_tmp, tree, salt, z, repIndex, node_idx);
+        tmp = reg_tmp;
+
+        s_node_idx = node_idx;
+        x = s_x;
+        y = s_y;
+        z = x;
+        z <<= 1;
+        z += 1;
+        () = #unspill(tree_have);
+        t8 = tree_have[ z];
+        
+        if( t8 == 0)
+        {
+          /* left child = H_left(seed_i || salt || t || i) */
+
+          tree_have[z] = 1;
+          () = #spill(tree_have);
+
+          b = 0;
+          z *= PNC_SEED_SIZE;
+          reg_tmp = tmp;
+          () = #unspill(tree);
+          tree = __copy3Words_1(tree, reg_tmp, z, b);
+          () = #spill(tree);
+        }
+
+        /* The last non-leaf node will only have a left child when there are an odd number of leaves */
+        
+        z = x;
+        z <<= 1;
+        z += 2;
+        () = #unspill(tree_exists);
+        t8 = _exists_1(tree_exists, z, t8);
+        if(t8 == 1)
+        {
+          () = #unspill(tree_have);
+          t8 = tree_have[ z];
+
+          if(t8 == 0)
+          {
+            /* right child = H_right(seed_i || salt || t || i)  */
+
+            tree_have[ z] = 1;
+            () = #spill(tree_have);
+
+            b = PNC_SEED_SIZE;
+            z *= PNC_SEED_SIZE;
+            reg_tmp = tmp;
+            () = #unspill(tree);
+            tree = __copy3Words_1(tree, reg_tmp, z, b);
+            () = #spill(tree);
+            
+          }
+        } 
+      }
+      x += 1;
+    }
+
+    () = #unspill(tree, tree_have, tree_exists);
+    return tree, tree_have, tree_exists;
+}
+
+inline fn __expandSeeds_1(
+  #[secret]        stack u8[TREE_NODES_1_SIZE] tree,
+  #[public]        stack u8[TREE_NUM_NODES_1] tree_have,
+  #[public]        stack u8[TREE_NUM_NODES_1] tree_exists,
+  #[poly=salt]     stack u8[PNC_SALT_SIZE] salt,
+  #[poly=repIndex] reg u16 repIndex
+) -> stack u8[TREE_NODES_1_SIZE], stack u8[TREE_NUM_NODES_1], stack u8[TREE_NUM_NODES_1]
+{
+  reg ptr u8[TREE_NODES_1_SIZE] a;
+  reg ptr u8[TREE_NUM_NODES_1] b;
+  reg ptr u8[TREE_NUM_NODES_1] c;
+  reg ptr u8[PNC_SALT_SIZE] d;
+
+  a = tree;
+  b = tree_have;
+  c = tree_exists;
+  d = salt;
+
+  a,b,c = _expandSeeds_1(a,b,c,d,repIndex);
+  tree = a;
+  tree_have = b;
+  tree_exists = c;
+
+  return tree, tree_have, tree_exists;
+}
+
+#[returnaddress="stack"]
+fn _expandSeeds_2(
+  #[secret]        reg ptr u8[TREE_NODES_2_SIZE] tree,
+  #[public]        reg ptr u8[TREE_NUM_NODES_2] tree_have,
+  #[public]        reg ptr u8[TREE_NUM_NODES_2] tree_exists,
+  #[poly=salt]     reg ptr u8[PNC_SALT_SIZE] salt,
+  #[poly=repindex] reg u16 repIndex
+) -> reg ptr u8[TREE_NODES_2_SIZE], reg ptr u8[TREE_NUM_NODES_2], reg ptr u8[TREE_NUM_NODES_2]
+{
+    
+  stack u64 s_x s_y s_a s_lastNonLeaf;
+  
+  reg u64 lastNonLeaf;
+  reg u64 x y z a b;
+  reg u16 node_idx;
+  reg u8  t8;
+
+  stack u8[4 * 2 * MAX_SEED_SIZE_BYTES] tmp;
+
+  () = #spill(tree, tree_have, tree_exists, salt, repIndex);
+
+  /* Walk the tree, expanding seeds where possible. Compute children of * non-leaf nodes. */
+
+    lastNonLeaf = TREE_NUM_NODES_2;
+    lastNonLeaf -= 1;
+    lastNonLeaf = _getParent(lastNonLeaf);
+
+    /* expand the first 4 seeds */
+    
+    x = 0;
+    y = 2;
+    if(lastNonLeaf < y){ y = lastNonLeaf; }
+    s_lastNonLeaf = lastNonLeaf;
+
+    while( x <= y )
+    {
+      () = #unspill(tree_have);
+      t8 = tree_have[x];
+      () = #spill(tree_have);
+
+      if(t8 == 1)
+      { 
+        z = x;
+        z *= PNC_SEED_SIZE;
+        node_idx = x;
+        s_x = x;
+        s_y = y;
+
+        () = #unspill(tree, salt, repIndex);
+        tmp = __hashSeed_2(tmp, tree, salt, z, repIndex, node_idx);
+
+        z = s_x;
+        z <<= 1;
+        z += 1;
+        () = #unspill(tree_have);
+        t8 = tree_have[ z];
+        
+        if(t8 == 0)
+        {
+          /* left child = H_left(seed_i || salt || t || i) */
+
+          tree_have[z] = 1;
+
+          b = 0;
+          z *= PNC_SEED_SIZE;
+          () = #unspill(tree);
+          tree = __copy3Words_2(tree, tmp, z, b);
+          () = #spill(tree);
+        }
+        () = #spill(tree_have);
+
+        /* The last non-leaf node will only have a left child when there are an odd number of leaves */
+        
+        z = s_x;
+        z <<= 1;
+        z += 2;
+
+        () = #unspill(tree_exists);
+        t8 = __exists_2(tree_exists, z, t8);
+        if(t8 == 1)
+        { 
+          
+          () = #unspill(tree_have);
+          t8 = tree_have[z];
+          
+          if(t8 == 0)
+          {
+            
+            /* right child = H_right(seed_i || salt || t || i)  */
+
+            tree_have[z] = 1;
+            
+            b = PNC_SEED_SIZE;
+            z *= PNC_SEED_SIZE;
+            
+            () = #unspill(tree);
+            tree = __copy3Words_2(tree, tmp, z, b);
+            () = #spill(tree);
+            
+          }
+          
+          () = #spill(tree_have);
+
+        }
+        x = s_x;
+        y = s_y;
+        
+      }
+      x += 1;
+    }
+
+    /* now hash in groups of 4 for faster hashing */
+    y = s_lastNonLeaf;
+    y >>= 2;
+    y <<= 2;
+
+    while(x <= y)
+    {
+      
+      z = x;
+      z *= PNC_SEED_SIZE;
+      node_idx = x;
+      s_x = x;
+      s_y = y;
+
+      () = #unspill(tree, salt, repIndex);
+      tmp = __hashSeed_x4_2(tmp, tree, salt, z, repIndex, node_idx);
+
+      a = 0;
+      while(a < 4)
+      {
+        s_a = a;
+        x = s_x;
+        () = #unspill(tree_have);
+        t8 = tree_have[ x];
+
+        if(t8 == 1)
+        {
+          z = s_x;
+          z <<= 1;
+          z += 1;
+          () = #unspill(tree_have);
+          t8 = tree_have[ z];
+
+          if(t8 == 0)
+          {
+            /* left child = H_left(seed_i || salt || t || j) */
+            
+            b = s_a;
+            b *= 2;
+            b *= MAX_SEED_SIZE_BYTES;
+            
+            tree_have[z] = 1;
+
+            z *= PNC_SEED_SIZE; // Set index to pointer
+            () = #unspill(tree);
+            tree = __copy3Words_2(tree, tmp, z, b);
+            () = #spill(tree);
+          }
+          () = #spill(tree_have);
+
+          z = x;
+          z <<= 1;
+          z += 2;
+
+
+          /* The last non-leaf node will only have a left child when there are an odd number of leaves */
+          () = #unspill(tree_exists);
+          t8 = __exists_2(tree_exists, z, t8);
+
+          if(t8 == 1)
+          {
+            () = #unspill(tree_have);
+            t8 = tree_have[ z];
+            if(t8 == 0)
+            {
+              /* right child = H_right(seed_i || salt || t || j)  */
+
+              b = s_a;
+              b *= 2;
+              b *= MAX_SEED_SIZE_BYTES;
+              b += PNC_SEED_SIZE;
+              
+              tree_have[ z] = 1;
+
+              z *= PNC_SEED_SIZE; // Set index to pointer
+              () = #unspill(tree);
+              tree = __copy3Words_2(tree, tmp, z, b);
+              () = #spill(tree);
+            }
+            () = #spill(tree_have); 
+          }
+        }
+        () = #spill(tree_have);
+        a = s_a;
+        a += 1;
+        s_x += 1;
+      }
+      x = s_x;
+      y = s_y;
+    }
+
+    /* handle last few, which are not a multiple of 4 */
+    y = s_lastNonLeaf;
+    while(x <= y)
+    {
+      () = #unspill(tree_have);
+      t8 = tree_have[x];
+      () = #spill(tree_have);
+
+      if(t8 == 1)
+      {
+        z = x;
+        z *= PNC_SEED_SIZE;
+        node_idx = x;
+        s_x = x;
+        s_y = y;
+
+        () = #unspill(tree, salt, repIndex);
+        tmp = __hashSeed_2(tmp, tree, salt, z, repIndex, node_idx);
+
+        x = s_x;
+        z = x;
+        z <<= 1;
+        z += 1;
+        () = #unspill(tree_have);
+        t8 = tree_have[ z];
+        
+        if( t8 == 0)
+        {
+          /* left child = H_left(seed_i || salt || t || i) */
+
+          tree_have[z] = 1;
+
+          b = 0;
+          z *= PNC_SEED_SIZE;
+          () = #unspill(tree);
+          tree = __copy3Words_2(tree, tmp, z, b);
+          () = #spill(tree); 
+        }
+        () = #spill(tree_have);
+
+        /* The last non-leaf node will only have a left child when there are an odd number of leaves */
+        
+        z = x;
+        z <<= 1;
+        z += 2;
+        () = #unspill(tree_exists);
+        t8 = __exists_2(tree_exists, z, t8);
+        if(t8 == 1)
+        {
+          () = #unspill(tree_have);
+          t8 = tree_have[ z];
+
+          if(t8 == 0)
+          {
+            /* right child = H_right(seed_i || salt || t || i)  */
+
+            tree_have[ z] = 1;
+
+            b = PNC_SEED_SIZE;
+            z *= PNC_SEED_SIZE;
+            () = #unspill(tree);
+            tree = __copy3Words_2(tree, tmp, z, b);
+            () = #spill(tree);
+            
+          }
+          () = #spill(tree_have);
+        }
+      }
+
+      y = s_y;
+      x += 1;
+    }
+
+    () = #unspill(tree, tree_have, tree_exists);
+    return tree, tree_have, tree_exists;
+}
+
+inline fn __expandSeeds_2(
+  #[secret]        stack u8[TREE_NODES_2_SIZE] tree,
+  #[public]        stack u8[TREE_NUM_NODES_2] tree_have,
+  #[public]        stack u8[TREE_NUM_NODES_2] tree_exists,
+  #[poly=salt]     stack u8[PNC_SALT_SIZE] salt,
+  #[poly=repIndex] reg u16 repIndex
+) -> stack u8[TREE_NODES_2_SIZE], stack u8[TREE_NUM_NODES_2], stack u8[TREE_NUM_NODES_2]
+{
+
+  reg ptr u8[TREE_NODES_2_SIZE] a;
+  reg ptr u8[TREE_NUM_NODES_2] b;
+  reg ptr u8[TREE_NUM_NODES_2] c;
+  reg ptr u8[PNC_SALT_SIZE] d; 
+
+  a = tree;
+  b = tree_have;
+  c = tree_exists;
+  d = salt;
+  a,b,c = _expandSeeds_2(a,b,c,d,repIndex);
+  tree = a;
+  tree_have = b;
+  tree_exists = c;
+
+  return tree, tree_have, tree_exists;
+}
+
+fn _getRevealedNodes(
+  #[public] reg ptr u64[REVEALED_SIZE] revealed,
+  #[public] reg ptr u8[TREE_NUM_NODES_1] tree_exists,
+  #[public] reg ptr u8[SIG_CHALLENGE_C_SIZE] hideList
+) -> reg ptr u64[REVEALED_SIZE], reg u64
+{
+
+  stack u16[PNC_N_ROUNDS * (TREE_DEPTH_1 - 1)] pathSets;
+
+  reg u8 t8 t8_aux;
+  reg u16 node;
+  reg u64 d i revealedPos sibling t64 idx;
+
+  /* Compute the paths back to the root */
+
+  i=0;
+  while(i < PNC_N_OPENED_ROUNDS)
+  {
+  
+    node = hideList[:u16 i];
+    node += TREE_NUM_NODES_1 - TREE_NUM_LEAVES_1;  /* input lists leaf indexes, translate to nodes */
+
+    idx = 0;
+    idx *= PNC_N_OPENED_ROUNDS;
+    idx += i;
+    pathSets[:u16 idx] = node;
+
+    idx += PNC_N_OPENED_ROUNDS;
+
+    
+    node =  _getParent_u16(node);
+    while(node != 0)
+    {
+      pathSets[:u16 idx] = node;
+      node = _getParent_u16(node);
+      idx += PNC_N_OPENED_ROUNDS;
+    }
+
+    i += 1;
+  }
+
+  /* Determine seeds to reveal */
+  d=0;
+  revealedPos = 0;
+  while(d < TREE_DEPTH_1 - 1)
+  {
+    i=0;
+    while(i < PNC_N_OPENED_ROUNDS)
+    {
+      t64 = d;
+      t64 *= PNC_N_OPENED_ROUNDS;
+      t64 += i;
+      node = pathSets[t64];
+
+      t64 = (64u) node;
+      t8 = __hasSibling(tree_exists, t64);
+      
+      if(t8 == 1)
+      {
+        t64 = d;
+        t64 *= PNC_N_OPENED_ROUNDS;
+        t64 += i;
+        node = pathSets[t64];
+        t64 = (64u) node;
+
+        sibling = __getSibling(t64);
+
+        t64 = d;
+        t64 *= PNC_N_OPENED_ROUNDS;
+        t8 = __contains_pathSets(pathSets, sibling, t64);
+
+        if(t8 == 0)
+        {
+          // Determine the seed to reveal
+          t8 = __hasRightChild_T1_v2(tree_exists, sibling);
+          t8_aux = t8;
+          t8 = __isLeafNode(sibling);
+          t8_aux += t8;
+          
+          while(t8_aux == 0)
+          {
+            sibling <<= 1; // sibling = leftChild(sibling)
+            sibling += 1;
+
+            t8 = __hasRightChild_T1_v2(tree_exists, sibling);
+            t8_aux = t8;
+            t8 = __isLeafNode(sibling);
+            t8_aux += t8;
+          }
+          
+          // Only reveal if we haven't already
+          t8 = _contains(revealed, revealedPos, sibling);
+          if(t8 == 0)
+          {
+            revealed[revealedPos] = sibling;
+            revealedPos += 1;
+          }
+        }
+        
+      }
+      
+      i += 1;
+    }
+    d += 1;
+  }  
+
+  return revealed, revealedPos; 
+}
+
+inline fn __getRevealedNodes(
+  #[public] stack u64[REVEALED_SIZE] revealed,
+  #[public] reg ptr u8[TREE_NUM_NODES_1] tree,
+  #[public] reg ptr u8[SIG_CHALLENGE_C_SIZE] hideList,
+  #[public] reg u64 revealedSize
+) -> stack u64[REVEALED_SIZE], reg u64
+{
+  reg ptr u64[REVEALED_SIZE] a;
+
+  a = revealed;
+  a, revealedSize = _getRevealedNodes(a, tree, hideList);
+  revealed = a;
+
+  return revealed, revealedSize;
+}
+
+inline
+fn _getRevealedNodes_2(
+  #[public] stack         u64[REVEALED_SIZE_2] revealed,
+  #[public] reg ptr u8[TREE_NUM_NODES_2] _tree_exists,
+  #[public] reg           u16 hideList
+) -> stack u64[REVEALED_SIZE_2], reg u64
+{
+
+  stack u16[TREE_DEPTH_2 - 1] pathSets;
+
+  reg u8 t8;
+  reg u16 node;
+  reg u64 d revealedPos sibling t64 idx;
+
+  stack u16 s_hideList;
+
+  stack u8 s_t8 s_t8_aux;
+  stack u64 s_d s_revealedPos s_sibling;
+
+  stack ptr u8[TREE_NUM_NODES_2] s_tree_exists;
+
+  s_hideList = hideList;
+  s_tree_exists = _tree_exists;
+
+  /* Compute the paths back to the root */
+
+  idx = 0;
+  node = s_hideList;
+  node += TREE_NUM_NODES_2 - TREE_NUM_LEAVES_2;  /* input lists leaf indexes, translate to nodes */
+
+  pathSets[:u16 idx] = node;
+  t64 = (64u)node;
+
+  idx += 1;
+
+  t64 = _getParent(t64);
+
+  while(t64 != 0)
+  {
+    pathSets[:u16 idx] = t64;
+    t64 = _getParent(t64);
+    idx += 1;
+  }
+
+  /* Determine seeds to reveal */
+  
+  d = 0;
+  s_revealedPos = 0;
+  while(d < TREE_DEPTH_2 - 1)
+  {
+    s_d = d;
+
+    t64 = s_d;
+    node = pathSets[t64];
+    t64 = (64u) node;
+    _tree_exists = s_tree_exists;
+    t8 = __hasSibling_2(_tree_exists, t64);
+
+    if(t8 == 1)
+    { 
+      t64 = s_d;
+      node = pathSets[t64];
+      t64 = (64u) node;
+      sibling = __getSibling_2(t64);
+      s_sibling = sibling;
+    
+      t64 = s_d;
+      t8 = __contains_pathSets_2(pathSets, sibling, t64);
+
+      if(t8 == 0)
+      { 
+        
+        // Determine the seed to reveal
+        _tree_exists = s_tree_exists;
+        sibling = s_sibling;
+        t8 = __hasRightChild_T2(_tree_exists, sibling);
+        s_t8 = t8;
+        t8 = 1;
+        t8 -= s_t8;
+        s_t8 = t8;
+
+        sibling = s_sibling;
+        t8 = __isLeafNode_2(sibling);
+        s_t8_aux = t8;
+        t8 = 1;
+        t8 -= s_t8_aux;
+        t8 += s_t8;
+    
+        while(t8 == 0)
+        {
+          sibling = s_sibling;
+          sibling <<= 1; 
+          sibling += 1;
+          s_sibling = sibling;
+
+          _tree_exists = s_tree_exists;
+          sibling = s_sibling;
+          _tree_exists = s_tree_exists;
+          t8 = __hasRightChild_T2(_tree_exists, sibling);
+          s_t8 = t8;
+          t8 = 1;
+          t8 -= s_t8;
+          s_t8 = t8;
+
+          sibling = s_sibling;
+          t8 = __isLeafNode_2(sibling);
+          s_t8_aux = t8;
+          t8 = 1;
+          t8 -= s_t8_aux;
+          t8 += s_t8;
+        }
+        
+        
+        // Only reveal if we haven't already
+      
+        sibling = s_sibling;
+        revealedPos = s_revealedPos;
+        t8 = _contains_2(revealed, revealedPos, sibling);
+        if(t8 == 0)
+        {
+          revealedPos = s_revealedPos;
+          revealed[revealedPos] = sibling;
+          revealedPos += 1;
+        } 
+        s_revealedPos = revealedPos;          
+      }
+    }
+
+    d = s_d;
+    d += 1;
+  }
+    
+  revealedPos = s_revealedPos;
+
+  return revealed, revealedPos; 
+}
+
+inline fn __computeParentHash(
+  #[secret] stack u8[TREE_NODES_3_SIZE] tree,
+  #[public] stack u8[TREE_NUM_NODES_3] tree_have,
+  #[public] stack u8[TREE_NUM_NODES_3] tree_exists,
+  #[public] reg u64 child,
+  #[secret] stack u8[PNC_SALT_SIZE] salt
+) -> stack u8[TREE_NODES_3_SIZE], stack u8[TREE_NUM_NODES_3], stack u8[TREE_NUM_NODES_3]
+{
+  reg u8 t8;
+  reg u16 parent_u16;
+  reg u64 parent child_aux t;
+
+  stack u64 s_parent;
+
+  reg ptr u8[TREE_NODES_3_SIZE] reg_tree;
+  reg ptr u8[TREE_NUM_NODES_3] reg_tree_have;
+  reg ptr u8[TREE_NUM_NODES_3] reg_tree_exists;
+  reg ptr u8[PNC_SALT_SIZE] reg_salt;
+
+  t = child;
+  reg_tree_exists = tree_exists;
+  t8 = __exists_3(reg_tree_exists, t, t8);
+
+  if(t8 == 1)
+  {
+    parent = child; // update parent register
+    parent = _getParent(parent); 
+    t8 = tree_have[parent];
+
+    s_parent = parent;
+
+    if(t8 == 0)
+    {
+      child_aux = parent;
+      child_aux <<= 1;
+      child_aux += 1;
+
+      /* Compute the hash for parent, if we have everything */
+      t8 = tree_have[child_aux];
+
+      if(t8 == 1)
+      {
+
+        child_aux += 1;
+        t = child_aux;
+        reg_tree_exists = tree_exists;
+        t8 = __exists_3(reg_tree_exists, t, t8);
+
+        if(t8 == 1){
+
+          t8 = tree_have[child_aux];
+
+          if(t8 == 1){ // If that node was not yet computed
+
+            /* Compute parent data = H(left child data || [right child data] || salt || parent idx) */
+
+            reg_salt   = salt;
+            parent_u16 = parent;
+            reg_tree   = tree;
+            reg_tree_have = tree_have;
+            reg_tree_exists = tree_exists;
+            reg_tree, reg_tree_have, reg_tree_exists = 
+              _computeParentHash(reg_tree, reg_tree_have, reg_tree_exists, reg_salt, parent, parent_u16);
+            tree_exists = reg_tree_exists;
+            tree_have = reg_tree_have;
+            tree = reg_tree;
+          }
+        } 
+        else // If that node was not yet computed
+        { 
+          /* Compute parent data = H(left child data || [right child data] || salt || parent idx) */
+
+          reg_salt   = salt;
+          parent_u16 = parent;
+          reg_tree   = tree;
+          reg_tree_have = tree_have;
+          reg_tree_exists = tree_exists;
+          reg_tree, reg_tree_have, reg_tree_exists = 
+            _computeParentHash(reg_tree, reg_tree_have, reg_tree_exists, reg_salt, parent, parent_u16);
+          tree_exists = reg_tree_exists;
+          tree_have = reg_tree_have;
+          tree = reg_tree;
+        }
+      }
+    }
+  }
+
+  return tree, tree_have, tree_exists;
+}
+
+fn _getRevealedMerkleNodes(
+  #[public] reg ptr u8[TREE_NUM_NODES_3] tree_exists,
+  #[public] reg ptr u16[MISSING_LEAVES_SIZE] missingLeaves,
+  #[public] reg ptr u64[REVEALED_SIZE] revealed
+) -> reg ptr u64[REVEALED_SIZE], reg u64
+{
+  reg u8 t8;
+  reg u16 t16 node;
+  reg u64 lastNonLeaf pos i t64 aux;
+
+  stack u8[TREE_NUM_NODES_3] missingNodes;
+
+  /* Mark leaves that are missing */
+
+  i = 0;
+  while(i < TREE_NUM_NODES_3)
+  {
+    missingNodes[i] = 0;
+
+    i += 1;
+  }
+  
+  i = 0;
+  while(i < MISSING_LEAVES_SIZE)
+  {
+    t16 = missingLeaves[i];
+    t64 = (64u)t16;
+    missingNodes[ (TREE_NUM_NODES_3 - TREE_NUM_LEAVES_3) + t64] = 1;
+
+    i += 1;
+  }
+  
+
+  /* For the nonleaf nodes, if both leaves are missing, mark it as missing too */
+  
+  lastNonLeaf = TREE_NUM_NODES_3 - 1;
+  lastNonLeaf = _getParent(lastNonLeaf);
+  while(lastNonLeaf > 0)
+  {
+    t64 = lastNonLeaf;
+    t8 = __exists_3(tree_exists, t64, t8);
+    if(t8 == 1)
+    {
+      t64 <<= 1;
+      t64 += 2;
+      t8 = __exists_3(tree_exists, t64, t8);
+      if(t8 == 1)
+      {
+
+        // if (missingNodes[2 * i + 1] && missingNodes[2 * i + 2])
+
+        t8 = missingNodes[t64];
+        if(t8 == 1)
+        {
+          t64 -= 1;
+          t8 = missingNodes[t64];
+          if(t8 == 1)
+          {
+            missingNodes[lastNonLeaf] = 1;
+          }
+
+        }
+      }
+      else
+      {
+        t64 -= 1;
+        t8 = missingNodes[t64];
+        if(t8 == 1)
+        {
+          missingNodes[lastNonLeaf] = 1;
+        }
+      }
+    } 
+
+    lastNonLeaf -= 1;
+  }
+
+
+  /* For each missing leaf node, add the highest missing node on the path
+    * back to the root to the set to be revealed */
+   
+   pos = 0;
+   i = 0;
+   while(i < MISSING_LEAVES_SIZE)
+   {
+      
+    node = missingLeaves[i];
+    node += TREE_NUM_NODES_3 - TREE_NUM_LEAVES_3;
+    
+    t64 = (64u) node;
+    aux = (64u) node;
+      while(t64 != 0)
+      {
+        t64 = _getParent(t64);
+        t8 = missingNodes[t64];
+        
+        if(t8 == 0)
+        {
+
+          t8 = _contains(revealed, pos, aux);
+        
+          if(t8 == 0)
+          {
+            revealed[pos] = aux;
+            pos += 1;
+          }
+        
+
+          t64 = 0;
+        }
+
+        aux = t64;
+      }
+      
+      i += 1;
+   }
+   
+   return revealed, pos;
+}
+
+inline fn __getRevealedMerkleNodes(
+  #[public] reg ptr u8[TREE_NUM_NODES_3] tree_exists,
+  #[public] reg ptr u16[MISSING_LEAVES_SIZE] missingLeaves,
+  #[public] stack u64[REVEALED_SIZE] revealed
+) -> stack u64[REVEALED_SIZE], reg u64
+{
+  reg u64 res;
+  reg ptr u64[REVEALED_SIZE] a;
+
+  a = revealed;
+  a, res = _getRevealedMerkleNodes(tree_exists, missingLeaves, a);
+  revealed = a;
+
+  return revealed, res;
+}
+
+#[returnaddress="stack"]
+fn _openMerkleTreeSize(
+  reg ptr u8[TREE_NUM_NODES_3] treeCv_exists,
+  reg ptr u16[MISSING_LEAVES_SIZE] missingLeaves,
+  reg ptr u64[REVEALED_SIZE] revealed
+) -> reg ptr u64[REVEALED_SIZE], reg u64
+{
+
+  reg u64 revealedSize;
+
+  revealed, revealedSize = _getRevealedMerkleNodes(treeCv_exists, missingLeaves, revealed);
+
+  return revealed, revealedSize;
+}
+
+

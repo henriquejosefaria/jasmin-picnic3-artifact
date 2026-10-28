@@ -1,0 +1,164 @@
+require "params.jinc"
+
+require "picnic3_aux.jinc"
+require "picnic3_tree.jinc"
+require "lowmc_impl_aux.jinc"
+
+/*
+ * This function computes the the auxiliary tape the last player needs to 
+ * nulify the combined masking on all players shares per round, and the 
+ * input mask used during the online phase.
+ */
+#[returnaddress="stack"]
+fn _computeAuxTape(
+	#[secret] reg ptr u8[TAPES_FULL_SIZE] tapes,
+	#[secret] reg ptr u8[MZD_SIZE] input_masks,
+	#[secret] reg ptr u8[MZD_SIZE] privKey
+) -> reg ptr u8[TAPES_FULL_SIZE], reg ptr u8[MZD_SIZE]
+{
+
+	stack u8[MZD_SIZE] lowmc_key;
+	reg ptr u8[MZD_SIZE] reg_lowmc_key;
+
+	stack ptr u8[MZD_SIZE] s_input_masks;
+	stack ptr u8[MZD_SIZE] s_privKey;
+
+	s_privKey = privKey;
+	s_input_masks = input_masks;
+
+	reg_lowmc_key = lowmc_key;
+	tapes, reg_lowmc_key = __computeAuxTape_aux(tapes, reg_lowmc_key);
+
+	privKey = s_privKey;
+	input_masks = s_input_masks;
+	input_masks = __masked_mzd_to_char_array(input_masks, reg_lowmc_key, privKey);
+
+  	return tapes, input_masks;
+}
+
+/*
+ * This funtion assembles a sequence of proofs for the online round opened.
+ */
+fn _assemble_proof(
+	#[public]      reg u64 sig, 
+	#[poly=seeds]  reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+	#[public]      reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] seeds_exists,
+	#[poly=tapes]  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  	#[poly=salt]   reg const ptr u8[PNC_SALT_SIZE] salt,
+	#[poly=inputs] reg ptr u8[PNC_N_ROUNDS * MZD_SIZE] inputs,
+	#[poly=msgs]   reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+	#[public]      reg ptr u8[CHALLENGE_C_SIZE] challengeC,
+	#[public]      reg ptr u8[CHALLENGE_P_SIZE] challengeP
+) -> reg u64
+{
+	reg u8 t8;
+	reg u16 z16 t16 P_index_u16;
+	reg u64 P_index;
+
+	stack u16 s_P_index_u16;
+	stack u64 s_P_index;
+
+	stack ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] s_seeds;
+	stack ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] s_seeds_exists;
+	stack ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] s_tapes;
+	stack ptr u8[PNC_N_ROUNDS * MZD_SIZE] s_inputs;
+	stack ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] s_msgs;
+
+	stack ptr u8[CHALLENGE_C_SIZE] s_challengeC;
+	stack ptr u8[CHALLENGE_P_SIZE] s_challengeP;
+
+	stack ptr u8[PNC_SALT_SIZE] s_salt;
+	stack u8[TREE_NODES_2_SIZE] seeds_tree;
+	stack u8[TREE_NUM_NODES_2] seeds_tree_exists;
+
+	reg u64 z seeds_tree_idx;
+	stack u16 s_z16;
+	stack u64 s_z s_sig;
+
+	s_sig = sig;
+	s_salt = salt;
+	s_seeds = seeds;
+	s_seeds_exists = seeds_exists;
+	s_tapes = tapes;
+	s_inputs = inputs;
+	s_msgs = msgs;
+	s_challengeC = challengeC;
+	s_challengeP = challengeP;
+
+	z = 0;
+	s_z16 = 0;
+	while(z < PNC_N_ROUNDS)
+	{
+		s_z = z;
+
+		t16 = s_z16;
+		/* It is a public value - within the signature */
+		challengeC = s_challengeC;
+		t8 = _contains_challengeC_2(challengeC, t16);
+		
+		if(t8 == 1)
+		{
+			t16 = s_z16;
+			challengeC = s_challengeC;
+			P_index = _indexOf(challengeC, t16);
+			challengeP = s_challengeP;
+			P_index_u16 = challengeP[:u16 P_index];
+			s_P_index_u16 = P_index_u16;
+			P_index = (64u)P_index_u16;
+			s_P_index = P_index;
+
+			seeds = s_seeds;
+			seeds_exists = s_seeds_exists;
+
+			seeds_tree_idx = s_z;
+			seeds_tree, seeds_tree_exists = 
+				__copy_full_tree(seeds_tree,
+								 seeds_tree_exists,
+								 seeds,
+								 seeds_exists,
+								 seeds_tree_idx);
+			sig = __revealSeeds_2(seeds_tree, seeds_tree_exists, sig, P_index_u16);
+			
+
+			/* It is a public value - within the signature */
+			P_index = s_P_index;
+			z = LAST_PLAYER;
+			if(z != P_index)
+			{
+				z = s_z;
+				tapes = s_tapes;
+				sig = __copy_tape_aux_to_proof(sig, tapes, z);
+			}
+
+			z = s_z;
+			inputs = s_inputs;
+			sig = __copy_input_to_proof(sig, inputs, z);
+
+			z = s_z;
+			msgs = s_msgs;
+			P_index = s_P_index;
+			sig = __copy_msgs_to_proof(sig, msgs, z, P_index);
+
+			
+			/* recompute commitment of unopened party since we did not store it for memory optimization */
+			
+			z = s_z;
+			salt = s_salt;
+			seeds = s_seeds;
+			tapes = s_tapes;
+			P_index_u16 = s_P_index_u16;
+			sig = __commit_assemble(sig, seeds, tapes, salt, z, P_index_u16);
+		}
+
+		z16 = s_z16;
+		z16 = z16 + 1;
+		s_z16 = z16;
+			
+		z = s_z;
+		z = z + 1;
+	}
+
+	return sig;
+}
+
+

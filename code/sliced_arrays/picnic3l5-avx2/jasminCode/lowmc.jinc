@@ -1,0 +1,117 @@
+require "params.jinc"
+require "lowmc_global_vars.jinc"
+require "mzd_additional_transitions.jinc"
+require "bitstream.jinc"
+
+#[returnaddress="stack"]
+fn __sbox_uint64_lowmc_256_256_4(
+	#[mmy] reg u256 ymm0
+) -> reg u256
+{
+	#[mmy] reg u256 ymm1 ymm2 ymm3 ymm4 ymm5;
+
+	ymm1 = ymm0 & bitmask_a[:u256 0];
+	ymm2 = ymm0 & bitmask_b[:u256 0];
+	ymm3 = ymm0 & bitmask_c[:u256 0];
+
+
+	ymm0 = #VPSRL_4u64(ymm1,62);
+	ymm4 = #VPSRL_4u64(ymm2,63);
+
+	ymm1 = #VPSLL_4u64(ymm1,2);
+	ymm2 = #VPSLL_4u64(ymm2,1);
+
+	ymm0 = #VPERMQ(ymm0, 147); //??
+	ymm4 = #VPERMQ(ymm4, 147); //??
+
+	ymm1 |= ymm0;
+	ymm2 |= ymm4;
+
+
+	// b & c
+	ymm0 = ymm2 & ymm3;
+	// c & a
+	ymm4 = ymm1 & ymm3;
+	// a & b
+	ymm5 = ymm1 & ymm2;	
+
+
+	// (b & c) ^ a
+	ymm0 ^= ymm1;
+
+	// (c & a) ^ a ^ b
+	ymm4 ^= ymm2;
+	ymm4 ^= ymm1;
+
+	// (a & b) ^ a ^ b ^c
+	ymm5 ^= ymm3;
+	ymm5 ^= ymm1;
+	ymm5 ^= ymm2;
+
+
+	ymm1 = #VPSLL_4u64(ymm0,62);
+	ymm2 = #VPSLL_4u64(ymm4,63);
+
+	ymm0 = #VPSRL_4u64(ymm0,2);
+	ymm4 = #VPSRL_4u64(ymm4,1);
+
+	ymm1 = #VPERMQ(ymm1, 57); //??
+	ymm2 = #VPERMQ(ymm2, 57); //??
+
+	ymm0 |= ymm1;
+	ymm4 |= ymm2;
+
+
+	ymm5 ^= ymm4;
+	ymm0 ^= ymm5;
+
+	return ymm0;
+}
+
+/*
+ * This function computes PICNIC3's public key given a 
+ * private key and a plaintext as input.
+ */
+inline 
+fn _n_lowmc(
+	stack u8[MZD_SIZE] lowmc_key,
+	stack u8[MZD_SIZE] p, 
+	stack u8[MZD_SIZE] c
+) -> stack u8[MZD_SIZE] 
+{
+	#[mmy] reg u256 ymm0 ymm1;
+	stack u8[MZD_SIZE] y;
+
+	inline int z;
+
+	c = p;
+	c = __mzd_addmul_v_uint64_256_v3(c, lowmc_key, k_matrix, 0);
+
+	for z=0 to LOWMC_R
+	{
+		ymm0 = c[:u256 0];
+		ymm0 = __sbox_uint64_lowmc_256_256_4(ymm0);
+		c[:u256 0] = ymm0;
+
+		ymm1 = #set0_256();
+		y[:u256 0] = ymm1;
+		y = __mzd_addmul_v_uint64_256_v4(y, c, l_matrix, z);
+		ymm1 = y[:u256 0];
+
+		ymm1 ^= r_c.[:u256 z * MZD_SIZE];
+
+		c[:u256 0] = ymm1;
+		c = __mzd_addmul_v_uint64_256_v3(c, lowmc_key, k_matrix, z + 1);
+	}
+
+	return c;
+}
+
+
+
+
+
+
+
+
+

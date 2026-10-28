@@ -1,0 +1,31 @@
+require "picnic3_simulate.jinc"
+
+inline fn __simulateOnline_verify(
+  stack u8[MZD_SIZE] maskedKey,
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  stack u8[MSGS_FULL_SIZE] msgs,
+  stack u8[MZD_SIZE] plaintext,
+  reg u64 round unopened
+) -> stack u8[MSGS_FULL_SIZE]
+{
+  reg ptr u8[MZD_SIZE] a;
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] b;
+  reg ptr u8[MSGS_FULL_SIZE] c;
+  reg ptr u8[MZD_SIZE] d;
+  reg u64 tapes_offset msgs_offset;
+
+  a = maskedKey;
+  b = tapes;
+  c = msgs;
+  d = plaintext;
+
+  tapes_offset = round;
+  tapes_offset *= TAPES_FULL_SIZE;
+  tapes_offset += TAPE_TAPES_IDX;
+  msgs_offset = 0;
+
+  c = _simulateOnline(a, b, c, d, msgs_offset, tapes_offset, unopened);
+  msgs = c;
+
+  return msgs;
+}

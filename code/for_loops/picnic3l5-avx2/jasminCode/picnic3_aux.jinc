@@ -1,0 +1,696 @@
+require "params.jinc"
+require "io.jinc"
+require "lowmc_impl_aux_verify.jinc"
+
+
+fn _contains_challengeC_2(
+  #[public] reg ptr u8[SIG_CHALLENGE_C_SIZE] challengeC,
+  #[public] reg u16 value
+) -> reg u8
+{
+  reg u8 res;
+  reg u16 t16;
+  reg u64 i;
+  
+  res = 0;
+  i=0;
+  while(i < PNC_N_OPENED_ROUNDS)
+  {
+    t16 = challengeC[u16 (int)i];
+    if(t16 == value) { res = 1; i = PNC_N_OPENED_ROUNDS; }
+
+    i += 1;
+  }
+  
+  return res;
+}
+
+inline fn __contains_challengeC_2(
+  #[public] stack u8[SIG_CHALLENGE_C_SIZE] challengeC,
+  #[public] reg u16 value
+) -> reg u8
+{
+  reg u8 res;
+  reg ptr u8[SIG_CHALLENGE_C_SIZE] a;
+
+  a = challengeC;
+  res = _contains_challengeC_2(a, value);
+
+  return res;
+}
+
+
+fn _get_orderChallengeC(
+  reg ptr u8[SIG_CHALLENGE_C_SIZE] challengeC,
+  reg u16 value
+) -> reg u64
+{
+  reg u64 res;
+  reg u16 t16;
+  reg u64 i;
+  
+  res = 0;
+  i=0;
+  while(i < PNC_N_OPENED_ROUNDS)
+  {
+    t16 = challengeC[u16 (int)i];
+    if(t16 < value) { res += 1; }
+
+    i += 1;
+  }
+  
+  return res;
+}
+
+inline fn __get_orderChallengeC(
+  stack u8[SIG_CHALLENGE_C_SIZE] challengeC,
+  reg u16 value
+) -> reg u64
+{
+  reg u64 res;
+  reg ptr u8[SIG_CHALLENGE_C_SIZE] a;
+
+  a = challengeC;
+  res = _get_orderChallengeC(a, value);
+
+  return res;
+}
+
+
+fn __indexOf(
+  #[public] reg ptr u8[SIG_CHALLENGE_C_SIZE] challengeC,
+  #[public] reg u16 value
+  ) -> reg u64
+{
+  reg u16 t16;
+  reg u64 i P_index;
+
+  P_index = 0;
+
+  i=0;
+  while(i < PNC_N_OPENED_ROUNDS)
+  {
+    t16 = challengeC[u16 (int)i];
+    if(t16 == value) { P_index = i; i = PNC_N_OPENED_ROUNDS; }
+
+    i += 1;
+  }
+  
+  return P_index;
+}
+
+inline
+fn arePaddingBitsZero
+(
+  reg u8 t,
+  inline int byte_size,
+  inline int bit_size
+) -> reg u8
+{
+  reg u8 aux;
+
+  inline int diff;
+
+  diff = byte_size;
+  diff <<= 3;
+  diff -= bit_size;
+
+  aux = 0xff;
+  _, _, _, _, _, aux = #SHL_8(aux, diff);
+  aux ^= 0xff;
+  t &= aux; 
+
+  if(t != 0){t = 1;}
+
+  return t;
+}
+
+inline
+fn _copy_proof_from_sig(
+  stack u8[PROOFS_FULL_SIZE] proofs,
+  #[public] reg u64 sig,
+  reg u64 proof_idx,
+  reg u16 P_idx,
+  reg u8 t8
+) -> stack u8[PROOFS_FULL_SIZE], reg u64, reg u8
+{
+  reg u64 t;
+
+  stack u8 s_t8;
+  stack u16 s_P_idx;
+  stack u64 s_proof_idx;
+
+  inline int z;
+
+  s_t8 = t8;
+  s_P_idx = P_idx;
+  s_proof_idx = proof_idx;
+
+  for z=0 to PROOF_U64_SEED_INFO_SIZE
+  {
+    
+    t = [sig + 0];    
+    proofs.[u64 proof_idx] = t;
+
+    sig += 8;
+    proof_idx += 8;
+  }
+
+  P_idx = s_P_idx;
+  if(P_idx != LAST_PLAYER)
+  {
+
+    for z=0 to PROOF_U64_AUX_SIZE
+    {
+      t = [sig + 0];
+      proofs.[u64 proof_idx] = t;
+
+      proof_idx += 8;
+      sig += 8;
+    }
+
+    /*
+     * Retrieving public values withing the signature.
+     */
+    #[declassify] t8 = proofs[proof_idx-1];
+    t8= arePaddingBitsZero(t8, PROOF_AUX_SIZE, 3 * LOWMC_R * LOWMC_M_BITS);
+  }
+  else{
+    t8 = 0;
+    proof_idx += PROOF_AUX_SIZE; 
+  }
+  if(t8 == 0){
+    
+    for z=0 to PROOF_U64_INPUT_SIZE
+    {
+      t = [sig + 0];
+      proofs.[u64 proof_idx] = t;
+
+      proof_idx += 8;
+      sig += 8;
+    }
+
+    /*
+     * Retrieving public values withing the signature.
+     */
+    #[declassify] t8 = proofs[proof_idx-1];
+    t8 = arePaddingBitsZero(t8, PROOF_INPUT_SIZE, LOWMC_N_BITS);
+
+    if(t8 == 0)
+    {
+
+      for z=0 to PROOF_U64_MSGS_SIZE
+      {
+        t = [sig + 0];
+        proofs.[u64 proof_idx] = t;
+
+        proof_idx += 8;
+        sig += 8;
+      }
+
+      /*
+       * Retrieving public values withing the signature.
+       */
+      #[declassify] t8 = proofs[proof_idx - 1];
+      t8 = arePaddingBitsZero(t8, PROOF_MSGS_SIZE, 3 * LOWMC_R * LOWMC_M_BITS);
+
+      if(t8 == 0)
+      {
+        for z=0 to PROOF_U64_C_SIZE
+        {
+          t = [sig + 0];
+          proofs.[u64 proof_idx] = t;
+
+          proof_idx += 8;
+          sig += 8;
+        }
+      }
+    }
+  }
+
+  return proofs, sig, t8;
+}
+
+
+
+#[returnaddress="stack"]
+fn __computeAuxTape_aux(
+  #[secret] reg ptr u8[TAPES_FULL_SIZE] tapes,
+  #[secret] reg ptr u8[MZD_SIZE] lowmc_key
+) -> reg ptr u8[TAPES_FULL_SIZE], reg ptr u8[MZD_SIZE]
+{
+
+  reg u64 t;
+  reg u64 c1 c2;
+  reg u256 ymm0;
+
+  reg u64 tape_pos tape_aux_pos;
+
+
+  // combine into key shares and calculate lowmc evaluation in plain
+  
+  c1 = 0;
+  c2 = TAPE_PARITY_TAPE_IDX;
+  while( c1 < TAPE_SIZE_BYTES)
+  {
+    ymm0 = tapes.[:u256 c1];
+    tapes.[:u256 c2] = ymm0;
+
+    c1 += 32;
+    c2 += 32;
+  }
+
+  c1 = TAPE_SIZE_BYTES;
+  while(c1 < PNC_N_MPC_PARTIES * TAPE_SIZE_BYTES)
+  {
+    c2 = TAPE_PARITY_TAPE_IDX;
+    while(c2 < TAPE_PARITY_TAPE_IDX + TAPE_SIZE_BYTES)
+    {
+      ymm0 = tapes.[:u256 c1];
+      ymm0 ^= tapes.[:u256 c2];
+      tapes.[:u256 c2] = ymm0; 
+
+      c1 += 32;
+      c2 += 32;
+    }
+  }
+  
+  t = tapes.[:u64 TAPE_PARITY_TAPE_IDX + MZD_SIZE - 8];
+  t = #BSWAP_64(t);
+  lowmc_key[:u64 0] = t;
+
+  t = tapes.[:u64 TAPE_PARITY_TAPE_IDX + MZD_SIZE - 16];
+  t = #BSWAP_64(t);
+  lowmc_key[:u64 1] = t;
+
+  t = tapes.[:u64 TAPE_PARITY_TAPE_IDX + MZD_SIZE - 24];
+  t = #BSWAP_64(t);
+  lowmc_key[:u64 2] = t;
+
+  t = tapes.[:u64 TAPE_PARITY_TAPE_IDX + MZD_SIZE - 32];
+  t = #BSWAP_64(t);
+  lowmc_key[:u64 3] = t;
+
+  tape_pos = LOWMC_N_BITS;
+  tape_aux_pos = 0;
+
+  ymm0 = #set0_256();
+  c1 = N_TAPES * TAPE_SIZE_BYTES;
+  while(c1 < N_TAPES * TAPE_SIZE_BYTES + PNC_VIEW_SIZE)
+  {
+    tapes.[:u256 c1] = ymm0;
+
+    c1 += 32;
+  }
+  
+  // Perform LowMC evaluation and fix AND masks for all AND gates
+  lowmc_key, tapes = __lowmc_aux_impl_verify(lowmc_key, tapes);
+
+  return tapes, lowmc_key;
+}
+
+#[returnaddress="stack"]
+fn __computeAuxTape2_aux(
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[secret] reg ptr u8[MZD_SIZE] lowmc_key,
+  #[public] reg u64 pos
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE], reg ptr u8[MZD_SIZE]
+{
+
+  reg u64 c1 c2 c3;
+  reg u256 ymm0;
+
+  stack u64 s_pos;
+
+  s_pos = pos;
+
+  // combine into key shares and calculate lowmc evaluation in plain
+  c2 = 0;
+  while( c2 < TAPE_SIZE_BYTES)
+  {
+    ymm0 = tapes.[u256 pos];
+    tapes.[u256 TAPE_PARITY_TAPE_IDX + pos] = ymm0;
+
+    pos += 32;
+    c2 += 32;
+  }
+
+  c1 = 1;
+  while( c1 < PNC_N_MPC_PARTIES )
+  {
+    c3 = s_pos;
+    c3 += TAPE_PARITY_TAPE_IDX;
+    c2 = 0;
+    while( c2 < TAPE_SIZE_BYTES )
+    {
+      ymm0 = tapes.[u256 pos];
+      ymm0 ^= tapes.[u256 c3];
+      tapes.[u256 c3] = ymm0;
+      
+      pos += 32;
+      c3 += 32;
+      c2 += 32;
+    }
+
+    c1 += 1;
+  }
+
+  c1 = 0;
+  ymm0 = #set0_256();
+  while( c1 < TAPE_AUX_SIZE )
+  {
+    tapes.[u256 pos] = ymm0;
+
+    pos += 32;
+    c1 += 32;
+  }
+  
+  pos += TAPE_BUFFER_SIZE;
+  c1 = MZD_SIZE - 8;
+  while(c1 > 0)
+  {
+    c2 = tapes.[u64 pos];
+    c2 = #BSWAP_64(c2);
+    lowmc_key.[u64 c1] = c2;
+
+    pos += 8;
+    c1 -= 8;
+  }
+  c2 = tapes.[u64 pos];
+  c2 = #BSWAP_64(c2);
+  lowmc_key.[u64 c1] = c2;
+
+  // Perform LowMC evaluation and fix AND masks for all AND gates
+  pos = s_pos;
+  pos <<= 3;    /* passing tapes bits idx */
+  lowmc_key, tapes = __lowmc_aux_impl_verify2(lowmc_key, tapes, pos);
+
+  return tapes, lowmc_key;
+}
+
+/* Get one bit from a byte array */
+#[returnaddress="stack"]
+fn __getBit_auxTape(
+  reg ptr u8[SIG_PROOFS_SIZE] array,
+  reg     u64 in_idx,
+  reg     u64 bitNumber
+) -> reg u8
+{
+  reg u8 t8;
+  reg u64 x y;
+
+  // (array[bitNumber / 8] >> (7 - (bitNumber % 8))) & 0x01;
+
+  x = bitNumber;
+  x &= 7;
+  y = 7;
+  y -= x;
+
+  x = bitNumber;
+  x >>= 3;
+  x += in_idx;
+
+  t8 = array[(int)x];
+
+  _, _, _, _, _, t8 = #SHR_8(t8,y);
+
+  t8 &= 0x01;
+
+  return t8;
+}
+
+/* Set a specific bit in a byte array to a given value */
+#[returnaddress="stack"]
+fn _setBit_auxTape(
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] bytes,
+  reg     u64 bytes_idx,
+  reg     u64 bitNumber,
+  reg     u8 val
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg u8 t8 bit;
+  reg u64 x, y idx;
+
+  // bytes[bitNumber / 8] = 
+    //    (bytes[bitNumber >> 3] &
+    //      ~(1 << (7 - (bitNumber % 8)))) | 
+    //        (val << (7 - (bitNumber % 8)));
+
+
+  // ~(1 << (7 - (bitNumber % 8))))
+  x = bitNumber;
+  x &= 7;
+  y = 7;
+  y -= x;
+
+  t8 = 1;
+  _, _, _, _, _, t8 = #SHL_8(t8, y);
+  t8 ^= 0xff;
+
+  // (val << (7 - (bitNumber % 8)))
+
+  _, _, _, _, _, val = #SHL_8(val, y);
+  
+
+  // (bytes[bitNumber >> 3]
+  idx = bitNumber;
+  idx >>= 3;
+  idx += bytes_idx;
+  bit = bytes[idx];
+
+  bit &= t8;
+  bit |= val;
+
+
+  // bytes[bitNumber / 8] = ...
+  idx = bitNumber;
+  idx >>= 3;
+  idx += bytes_idx;
+
+  bytes[idx] = bit;
+
+  return bytes;
+}
+
+
+#[returnaddress="stack"]
+fn _setAuxBits(
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  reg ptr u8[SIG_PROOFS_SIZE] input,
+  reg   u64 tape_idx, 
+  reg   u64 in_idx
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg u8 bit;
+  reg u64 bit_idx inBit i;
+
+  inline int j;
+
+  tape_idx += LAST_PLAYER * TAPE_SIZE_BYTES; // Set the output pointer to the last player's tape
+
+  inBit = 0;
+
+  for j=0 to LOWMC_R
+  {
+    i=0;
+    bit_idx = LOWMC_N_BITS + LOWMC_N_BITS * 2 * j;
+    while(i < LOWMC_N_BITS)
+    {
+      bit = __getBit_auxTape(input, in_idx, inBit);
+      tapes = _setBit_auxTape(tapes, tape_idx, bit_idx, bit);
+
+      bit_idx += 1;
+      inBit += 1;
+      i += 1;
+    }
+  }
+
+  return tapes;
+}
+
+inline fn __setAuxBits(
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  stack u8[SIG_PROOFS_SIZE] input,
+  reg   u64 tape_idx, 
+  reg   u64 in_idx
+) -> stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] a;
+  reg ptr u8[SIG_PROOFS_SIZE] b;
+
+  a = tapes;
+  b = input;
+  a = _setAuxBits(a, b, tape_idx, in_idx);
+  tapes = a;
+
+  return tapes;
+}
+
+#[returnaddress="stack"]
+fn _createRandomTapes(
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  #[secret] reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 t
+) -> reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE]
+{
+  
+  reg u16 t16;
+  reg u64 t64 base_tapes;
+  stack u64 s_t;
+  inline int z;
+
+  s_t = t;
+
+  () = #spill(seeds, salt);
+
+  // Generates tapes for 4 players at a time; For 16 players we need 4 rounds
+  for z=0 to 4
+  {
+    t = s_t;
+    t16 = z * 4;
+    base_tapes = t;
+    base_tapes *= TAPES_FULL_SIZE;
+    base_tapes += z * 4 * TAPE_SIZE_BYTES;
+    t64 = t;
+    t64 *= TREE_NODES_2_SIZE;
+    t64 += GET_LEAVES_2 * PNC_SEED_SIZE + z * 4 * PNC_SEED_SIZE;
+
+    () = #unspill(seeds, salt);
+   tapes = __hashTapes2_x4(tapes, seeds, salt, t, t16, t64, base_tapes);
+  }
+
+  return tapes;
+}
+
+#[returnaddress="stack"]
+fn _createRandomTapes_verify(
+  #[secret] reg ptr u8[TAPES_FULL_SIZE] tapes,
+  #[secret] reg ptr u8[TREE_NODES_2_SIZE] seeds,
+  #[secret] reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 t
+) -> reg ptr u8[TAPES_FULL_SIZE]
+{
+  
+  reg u16 t16;
+  reg u64 t64 base_tapes;
+  stack u64 s_t;
+
+  inline int z;
+
+  s_t = t;
+
+  () = #spill(seeds, salt);
+
+  // Generates tapes for 4 players at a time; For 16 players we need 4 rounds
+  for z=0 to 4
+  {
+
+    t16 = z * 4;
+    base_tapes = z * 4 * TAPE_SIZE_BYTES;
+    t64 = GET_LEAVES_2 * PNC_SEED_SIZE + z * 4 * PNC_SEED_SIZE;
+    t = s_t;
+
+    () = #unspill(seeds, salt);
+    tapes = __hashTapes_x4(tapes, seeds, salt, t, t16, t64, base_tapes);
+
+  }
+
+  return tapes;
+}
+
+#[returnaddress="stack"]
+fn _mzd_from_char_array_2(
+  reg ptr u8[MZD_SIZE] result,
+  reg ptr u8[SIG_PROOFS_SIZE] data,
+  reg u64 in_idx
+) -> reg ptr u8[MZD_SIZE]
+{
+  reg u64 t;
+
+  inline int z;
+
+  for z=0 to MZD_U64_SIZE
+  {
+    t = data.[u64 in_idx + (MZD_U64_SIZE - z - 1)*8];
+    t = #BSWAP_64(t);
+    result[u64 z] = t;
+  }
+  
+  return result;
+}
+
+inline fn __mzd_from_char_array_2(
+  stack u8[MZD_SIZE] result,
+  stack u8[SIG_PROOFS_SIZE] data,
+  reg u64 in_idx
+) -> stack u8[MZD_SIZE]
+{
+  reg ptr u8[MZD_SIZE] a;
+  reg ptr u8[SIG_PROOFS_SIZE] b;
+
+  a = result;
+  b = data;
+  a = _mzd_from_char_array_2(a, b, in_idx);
+  result = a;
+
+  return result;
+}
+
+fn __contains_challengeC(
+  #[public] reg ptr u8[SIG_CHALLENGE_C_SIZE] signature,
+  #[public] reg u16 pos
+) -> reg u64
+{
+  reg u16 t;
+  reg u64 i res;
+  
+  res = 0;
+
+  i=0;
+  while(i < SIG_CHALLENGE_C_U16_SIZE)
+  {
+    t = signature[u16 (int)i];
+    if(t == pos)
+    {
+      res = 1;
+      i = SIG_CHALLENGE_C_U16_SIZE;
+    }
+    i += 1;
+  }
+
+  return res;
+}
+
+
+fn __getMissingLeavesList(
+  #[public]             reg ptr u8[SIG_CHALLENGE_C_SIZE] signature, 
+  #[poly=missingLeaves] reg ptr u16[MISSING_LEAVES_SIZE] missingLeaves
+) -> reg ptr u16[MISSING_LEAVES_SIZE]
+{
+
+  reg u64 pos t;
+  reg u16 i;
+
+  pos = 0;
+  i = 0;
+  while(i < PNC_N_ROUNDS)
+  {
+    t = __contains_challengeC(signature, i);
+    if(t == 0)
+    {
+      missingLeaves[(int)pos] = i;
+      pos += 1;
+    }
+
+    i += 1;
+  }
+
+  return missingLeaves; 
+}
+
+
+
+
+
+

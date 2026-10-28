@@ -1,0 +1,69 @@
+require "params.jinc"
+require "lowmc_global_vars.jinc"
+
+
+require "mzd_additional.jinc"
+require "bitstream.jinc"
+require "lowmc.jinc"
+
+
+//#[returnaddress="stack"]
+fn __lowmc_aux_impl(
+  reg ptr u8[MZD_SIZE] lowmc_key,
+  reg ptr u8[TAPES_FULL_SIZE] tapes
+) -> reg ptr u8[MZD_SIZE], reg ptr u8[TAPES_FULL_SIZE]
+{
+  
+  inline int r;
+
+  stack u8[MZD_SIZE] x y key0;
+  
+  reg ptr u8[MZD_SIZE] reg_key0 reg_x;
+
+  #[mmy] reg u256 t ymm0;
+  reg u64 pos tapes_pos tapes_aux_pos;
+
+
+  t = #set0_256();
+  x[u256 0] = t;
+
+  reg_key0 = key0;
+  reg_key0 = _mzd_copy_uint64_256(reg_key0, lowmc_key);
+
+  ymm0 = #set0_256();
+  y[u256 0] = ymm0;
+  y = __mzd_addmul_v_uint64_256_v2(y, reg_key0, ki_matrix);
+  
+  ymm0 = y[u256 0];
+  lowmc_key[u256 0] = ymm0;
+
+  for r=0 to LOWMC_R 
+  {
+      x = __mzd_addmul_v_uint64_256(x, lowmc_key, k_matrix[(LOWMC_R - r) * MATRIX_ROUND : MATRIX_ROUND]);
+      
+
+      reg_x = x;
+      ymm0 = #set0_256();
+      y[u256 0] = ymm0;
+      y = __mzd_addmul_v_uint64_256_v2(y, reg_x, li_matrix[(3-r) * MATRIX_ROUND : MATRIX_ROUND]);
+
+      // recover input masks from tapes, only in first round we use the key as input
+      if(r == (RC_ROUND - 1))
+      {
+        x = __mzd_copy_uint64_256(x, key0);
+      } else {
+
+        pos = LOWMC_U8_N * 2 * (LOWMC_R - 1 - r) + N_TAPES * TAPE_SIZE_BYTES + PNC_VIEW_SIZE + TAPE_BUFFER_SIZE;
+        x = __mzd_from_bitstream_tapes(tapes, x, pos);
+      }
+
+      tapes_pos = LOWMC_U8_N * 2 * (LOWMC_R - 1 - r) + LOWMC_U8_N;
+      tapes_aux_pos = LOWMC_U8_N * (LOWMC_R - 1 - r);
+
+      tapes = __picnic3_aux_sbox_bitsliced(x, y, tapes, tapes_pos, tapes_aux_pos);
+  }
+  
+  return lowmc_key, tapes;
+}
+
+

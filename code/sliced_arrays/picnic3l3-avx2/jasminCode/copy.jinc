@@ -1,0 +1,1738 @@
+
+
+inline fn __reg_to_stack_uint64_192(
+  #[poly=b] reg ptr u8[MZD_SIZE] a,
+  #[poly=b] stack u8[MZD_SIZE] b
+) -> stack u8[MZD_SIZE]
+{
+  reg u256 t;
+
+	t = a.[:u256 0];
+	b.[:u256 0] = t;
+
+  return b;
+}
+
+inline fn __stack_to_reg_uint64_192(
+  reg ptr u8[MZD_SIZE] a,
+  stack u8[MZD_SIZE] b
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u256 t;
+
+	t = b[:u256 0];
+	a[:u256 0] = t;
+
+  return a;
+}
+
+#[returnaddress="stack"]
+fn _WordsWords_from_reg(
+	 reg ptr u8[PNC_INPUT_SIZE] out,
+	    reg u64 in
+) -> reg ptr u8[PNC_INPUT_SIZE]
+{
+	reg u64 i t64;
+
+	i = 0;
+	while( i < PNC_U64_INPUT_SIZE)
+	{
+		t64 = [in + i * 8];
+		out[:u64 i] = t64;
+		i += 1;
+	}
+
+	return out;	
+}
+
+#[returnaddress="stack"]
+fn _memcpy_3Words_from_reg(
+	 reg ptr u8[PNC_INPUT_SIZE] out,
+	 #[public]   reg u64 in
+) -> reg ptr u8[PNC_INPUT_SIZE]
+{
+	reg u64 i t64;
+
+	i = 0;
+	while( i < PNC_U64_INPUT_SIZE)
+	{
+		t64 = [in + i * 8];
+		out[:u64 i] = t64;
+		i += 1;
+	}
+
+	return out;	
+}
+
+inline fn __memcpy_3Words_from_reg(
+	#[secret] stack u8[PNC_INPUT_SIZE] out,
+	#[public] reg u64 in
+) -> stack u8[PNC_INPUT_SIZE]
+{
+	reg ptr u8[PNC_INPUT_SIZE] a;
+
+	a = out;
+	a = _memcpy_3Words_from_reg(a, in);
+	out = a;
+
+	return out;
+}
+
+#[returnaddress="stack"]
+fn _memcpy_3SecretWords_from_reg(
+	#[secret] reg ptr u8[PNC_INPUT_SIZE] out,
+	reg 	u64 in
+) -> reg ptr u8[PNC_INPUT_SIZE]
+{
+	reg u64 i t64;
+
+	i = 0;
+	while( i < PNC_U64_INPUT_SIZE)
+	{
+		 t64 = [in + i * 8];
+		out[:u64 i] = t64;
+		i += 1;
+	}
+
+	return out;	
+}
+
+inline fn __memcpy_3SecretWords_from_reg(
+	#[secret] stack u8[PNC_INPUT_SIZE] out,
+	reg 	u64 in
+) -> stack u8[PNC_INPUT_SIZE]
+{
+	reg ptr u8[PNC_INPUT_SIZE] a;
+
+	a = out;
+	a = _memcpy_3Words_from_reg(a, in);
+	out = a;
+
+	return out;
+}
+
+#[returnaddress="stack"]
+fn _memcpy_6Words_from_reg(
+	 reg ptr u8[SIG_CHALLENGE_SIZE] out,
+	 #[public]   reg u64 in
+) -> reg ptr u8[SIG_CHALLENGE_SIZE]
+{
+	reg u64 i t64;
+
+	i = 0;
+	while( i < SIG_U64_CHALLENGE_SIZE)
+	{
+		t64 = [in + i * 8];
+		out[:u64 i] = t64;
+		i += 1;
+	}
+
+	return out;	
+}
+
+inline fn __memcpy_6Words_from_reg(
+	#[secret] stack u8[SIG_CHALLENGE_SIZE] out,
+	#[public] reg u64 in
+) -> stack u8[SIG_CHALLENGE_SIZE]
+{
+	reg ptr u8[SIG_CHALLENGE_SIZE] a;
+
+	a = out;
+	a = _memcpy_6Words_from_reg(a, in);
+	out = a;
+
+	return out;
+}
+
+#[returnaddress="stack"]
+fn _memcpy_3Words(
+	#[poly=in] reg ptr u8[PNC_INPUT_SIZE] out,
+	#[poly=in] reg ptr u8[PNC_INPUT_SIZE] in
+) -> reg ptr u8[PNC_INPUT_SIZE]
+{
+	reg u64 i t64;
+
+	i = 0;
+	while( i < PNC_INPUT_SIZE)
+	{
+		t64 = in.[:u64 i];
+		out.[:u64 i] = t64;
+		i += 8;
+	}
+
+	return out;	
+}
+
+inline fn __memcpy_3Words(
+	#[poly=in] stack u8[TREE_NODES_1_SIZE] out,
+	#[poly=in] stack u8[PNC_ROOT_SIZE] in
+) -> stack u8[TREE_NODES_1_SIZE]
+{
+	reg ptr u8[PNC_INPUT_SIZE] a;
+	reg ptr u8[PNC_INPUT_SIZE] b;
+
+	a = out[0:PNC_INPUT_SIZE];
+	b = in[0:PNC_INPUT_SIZE];
+
+	a = _memcpy_3Words(a,b);
+	out[0:PNC_INPUT_SIZE] = a;
+
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __memcpy_24bytes(
+	reg ptr u8[PNC_INPUT_SIZE] out,
+	reg ptr u8[PNC_INPUT_SIZE] in
+) -> reg ptr u8[PNC_INPUT_SIZE]
+{
+	reg u8 t8;
+	reg u64 i;
+
+	i = 0;
+	while( i < PNC_INPUT_SIZE)
+	{
+		t8 = in[i];
+		out[i] = t8;
+		i += 1;
+	}
+
+	return out;	
+}
+
+
+#[returnaddress="stack"]
+fn _memcpy_mzd_array(
+	 reg ptr u8[MZD_SIZE] out,
+	 reg ptr u8[MZD_SIZE] in
+) -> reg ptr u8[MZD_SIZE]
+{
+	reg u64 i t64;
+
+	i = 0;
+	while( i < PNC_U64_INPUT_SIZE)
+	{
+		t64 = in[:u64 i];
+		out[:u64 i] = t64;
+		i += 1;
+	}
+
+	return out;	
+}
+
+inline fn __memcpy_mzd_array(
+	#[poly=in] stack u8[MZD_SIZE] out,
+	#[poly=in] stack u8[MZD_SIZE] in
+) -> stack u8[MZD_SIZE]
+{
+	reg ptr u8[MZD_SIZE] a b;
+
+	a = out;
+	b = in;
+	a = _memcpy_mzd_array(a,b);
+	out = a; 
+
+	return out;
+}
+
+inline
+fn __memcpy_message(
+	#[secret] stack u8[PNC_MESSAGE_BYTE_LENGTH] out,
+	#[public] reg u64 in
+) -> stack u8[PNC_MESSAGE_BYTE_LENGTH]
+{
+	reg u8 t8;
+	reg u64 i;
+
+	i = 0;
+	while( i < PNC_MESSAGE_BYTE_LENGTH)
+	{
+		t8 = [:u8 in + i];
+		out[i] = t8;
+		i += 1;
+	}
+
+	return out;	
+}
+
+#[returnaddress="stack"]
+fn _memcpy_salt(
+	#[public]  reg u64 out,
+	#[poly=in] reg ptr u8[PNC_SALT_SIZE] in
+) -> reg u64
+{
+
+	reg u64 i t64;
+
+	i = 0;
+	while(i < PNC_U64_SALT_SIZE)
+	{
+		t64 = in[:u64 i];
+		[out + 0] = t64;
+		out += 8;
+		i += 1;
+	}
+
+	return out;
+}
+
+inline fn __memcpy_salt(
+	#[public]  reg u64 out,
+	#[poly=in] stack u8[PNC_SALT_AND_ROOT_LENGTH] in
+) -> reg u64
+{
+	reg ptr u8[PNC_SALT_SIZE] a;
+
+	a = in[0: PNC_SALT_SIZE];
+ 	out = _memcpy_salt(out,a);
+
+ 	return out;
+}
+
+inline
+fn _memcpy_salt_from_sig(
+	#[poly=in] stack u8[PNC_SALT_SIZE] out,
+	#[public]  reg u64 in
+) -> stack u8[PNC_SALT_SIZE], reg u64
+{
+
+	reg u64 i t64;
+
+	i = 0;
+	while(i < PNC_U64_SALT_SIZE)
+	{
+		t64 = [in + 0];
+		out[:u64 i] = t64;
+		in += 8;
+		i += 1;
+	}
+
+	return out, in;
+}
+
+inline
+fn __copy_seed_from_proofs(
+	stack u8[TREE_NODES_2_SIZE] tree, 
+	stack u8[SIG_PROOFS_SIZE] proofs, 
+	reg u64 tree_idx,
+	reg u64 proofs_idx
+) -> stack u8[TREE_NODES_2_SIZE], reg u64
+{
+	reg u64 i t;
+
+	i = 0;
+	while(i < PNC_U64_SEED_SIZE)
+	{	
+		t = proofs[:u64 proofs_idx];
+		tree.[:u64 tree_idx] = t;
+
+		proofs_idx += 1;
+		tree_idx += 8;
+		i += 1;
+	}
+
+	return tree, proofs_idx;
+}
+
+#[returnaddress="stack"]
+fn _memcpy_seedInfo(
+	reg ptr u8[PROOF_SEED_INFO_SIZE] seedInfo, 
+	reg ptr u8[SIG_PROOFS_SIZE] signature, 
+	reg u64 idx
+) -> reg ptr u8[PROOF_SEED_INFO_SIZE]
+{
+	reg u8 t8;
+	reg u64 i sig_idx;
+
+	sig_idx = idx;
+	sig_idx *= PROOF_FULL_SIZE;
+
+	i = 0;
+	while(i < PROOF_SEED_INFO_SIZE)
+	{	
+		t8 = signature[sig_idx + PROOF_SEED_INFO_IDX];
+		seedInfo[i] = t8;
+
+		sig_idx += 1;
+		i += 1;
+	}
+
+	return seedInfo;
+}
+
+inline
+fn __copy3Words_1_v1(
+	reg ptr u8[FULL_TREE_SIZE_1] tree, 
+	reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] tmp, 
+	reg u64 idx_1, 
+	reg u64 idx_2
+) -> reg ptr u8[FULL_TREE_SIZE_1]
+{
+	reg u64 t;
+
+	inline int z;
+
+	for z=0 to 3
+	{t = tmp.[:u64 idx_2 + z * 8]; tree.[:u64 idx_1 + z * 8] = t;}
+
+	return tree;
+}
+
+
+inline
+fn __copy3Words_1(
+	#[poly=tmp] reg ptr u8[TREE_NODES_1_SIZE] tree,
+	#[poly=tmp] reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] tmp,
+	#[public]   reg u64 idx_1,
+	#[public]   reg u64 idx_2
+) -> reg ptr u8[TREE_NODES_1_SIZE]
+{
+	reg u64 t;
+
+	inline int z;
+
+	for z=0 to 3
+	{t = tmp.[:u64 idx_2 + z * 8]; tree.[:u64 idx_1 + z * 8] = t;}
+
+	return tree;
+}
+
+
+
+inline fn __copy3Words_2_v1(
+	reg ptr u8[FULL_TREE_SIZE_2] tree, 
+	stack u8[4 * 2 * MAX_SEED_SIZE_BYTES] tmp, 
+	reg u64 idx_1, 
+	reg u64 idx_2
+) -> reg ptr u8[FULL_TREE_SIZE_2]
+{
+	reg u8 t;
+
+	inline int z;
+
+	for z=0 to PNC_INPUT_SIZE
+	{t = tmp.[idx_2 + z]; tree.[idx_1 + z] = t;}
+
+	return tree;
+}
+
+inline fn __copy3Words_2(
+	#[poly=tmp] reg ptr u8[TREE_NODES_2_SIZE] tree,
+	#[poly=tmp] stack u8[4 * 2 * MAX_SEED_SIZE_BYTES] tmp,
+	#[public]   reg u64 idx_1,
+	#[public]   reg u64 idx_2
+) -> reg ptr u8[TREE_NODES_2_SIZE]
+{
+	reg u8 t;
+
+	inline int z;
+
+	for z=0 to PNC_INPUT_SIZE
+	{t = tmp.[idx_2 + z]; tree.[idx_1 + z] = t;}
+
+	return tree;
+}
+
+inline fn __copy3Words_22(
+	#[poly=tmp] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] tree,
+	#[poly=tmp] stack u8[4 * 2 * MAX_SEED_SIZE_BYTES] tmp,
+	#[public]   reg u64 idx_1,
+	#[public]   reg u64 idx_2
+) -> reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE]
+{
+	reg u64 t;
+
+	inline int z;
+
+	for z=0 to PNC_U64_INPUT_SIZE
+	{t = tmp.[:u64 idx_2 + z * 8]; tree.[:u64 idx_1 + z*8] = t;}
+
+	return tree;
+}
+
+#[returnaddress="stack"]
+fn __copy_digest(
+	reg ptr u8[PNC_DIGEST_SIZE] dst,
+	reg ptr u8[PNC_DIGEST_SIZE] src
+) -> reg ptr u8[PNC_DIGEST_SIZE]
+{
+	reg u8 t;
+	reg u64 i;
+
+	i = 0;
+
+	while(i < PNC_DIGEST_SIZE)
+	{
+		t = src[i];
+		dst[ i] = t;
+
+		i += 1;
+	}
+
+	return dst;
+}
+
+#[returnaddress="stack"]
+fn __copy_digest_from_tree_v2(
+	#[public]  reg u64 out,
+	#[poly=in] reg ptr u8[TREE_NODES_3_SIZE] in,
+	#[public]  reg u64 in_pos
+) -> reg u64
+{
+	reg u64 t i;
+
+	i = 0;
+	while(i < PNC_U64_DIGEST_SIZE)
+	{
+		t = in.[:u64 in_pos];
+		[out + 0] = t;
+
+		in_pos += 8;
+		out += 8;
+		i += 1;
+	}
+
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __copy_digest_from_tree_v1(
+	reg ptr u8[SIG_CV_INFO_SIZE] out,
+	reg ptr u8[FULL_TREE_SIZE_3] in,
+	reg u64 out_pos,
+	reg u64 in_pos
+) -> reg ptr u8[SIG_CV_INFO_SIZE]
+{
+	reg u64 t;
+
+	t = in.[:u64 in_pos];
+	out.[:u64 out_pos] = t;
+
+	t = in.[:u64 in_pos + 8];
+	out.[:u64 out_pos + 8] = t;
+
+	t = in.[:u64 in_pos + 16];
+	out.[:u64 out_pos + 16] = t;
+
+	t = in.[:u64 in_pos + 24];
+	out.[:u64 out_pos + 24] = t;
+
+	t = in.[:u64 in_pos + 32];
+	out.[:u64 out_pos + 32] = t;
+
+	t = in.[:u64 in_pos + 40];
+	out.[:u64 out_pos + 40] = t;
+
+	return out;
+}
+
+
+#[returnaddress="stack"]
+fn __copy_digest_from_tree(
+	reg ptr u8[SIG_CV_INFO_SIZE] out,
+	reg ptr u8[TREE_NODES_3_SIZE] in,
+	reg u64 out_pos,
+	reg u64 in_pos
+) -> reg ptr u8[SIG_CV_INFO_SIZE]
+{
+	reg u64 t;
+
+	t = in.[:u64 in_pos];
+	out.[:u64 out_pos] = t;
+
+	t = in.[:u64 in_pos + 8];
+	out.[:u64 out_pos + 8] = t;
+
+	t = in.[:u64 in_pos + 16];
+	out.[:u64 out_pos + 16] = t;
+
+	t = in.[:u64 in_pos + 24];
+	out.[:u64 out_pos + 24] = t;
+
+	t = in.[:u64 in_pos + 32];
+	out.[:u64 out_pos + 32] = t;
+
+	t = in.[:u64 in_pos + 40];
+	out.[:u64 out_pos + 40] = t;
+
+	return out;
+}
+
+
+#[returnaddress="stack"]
+fn __copy_seed_to_iSeed(
+	reg ptr u8[SIG_I_SEED_INFO_SIZE] out,
+	reg ptr	u8[TREE_NODES_1_SIZE] in,
+	reg u64 out_pos,
+	reg u64 in_pos
+) -> reg ptr u8[SIG_I_SEED_INFO_SIZE]
+{
+	reg u64 t;
+
+	t = in.[:u64 in_pos];
+	out.[:u64 out_pos] = t;
+
+	t = in.[:u64 in_pos + 8];
+	out.[:u64 out_pos + 8] = t;
+
+	t = in.[:u64 in_pos + 16];
+	out.[:u64 out_pos + 16] = t;
+	
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __copy_seed_to_sig(
+	#[public]  reg u64 out,
+	#[poly=in] reg ptr u8[TREE_NODES_1_SIZE] in,
+	#[public]  reg u64 in_pos
+) -> reg u64
+{
+	reg u64 t;
+
+	inline int z;
+
+	for z=0 to PNC_U64_SEED_SIZE
+	{
+		t = in.[:u64 in_pos];
+		[out + 0] = t;
+
+		in_pos += 8;
+		out += 8;
+	}
+	
+	return out;
+}
+
+#[returnadress="stack"]
+fn __copy_seed_from_iSeed_v1(
+	reg ptr u8[FULL_TREE_SIZE_2] out,
+	reg ptr	u8[FULL_TREE_SIZE_1] in,
+	reg u64 out_pos,
+	reg u64 in_pos
+) -> reg ptr u8[FULL_TREE_SIZE_2]
+{
+	reg u8 t8;
+
+	inline int z;
+
+	for z=0 to TREE_DATA_SIZE
+	{
+		t8 = in[in_pos];
+		out[out_pos] = t8;
+
+		in_pos += 1;
+		out_pos += 1;
+	}
+	
+	return out;
+}
+
+#[returnadress="stack"]
+fn __copy_seed_from_iSeed(
+	reg ptr u8[TREE_NODES_2_SIZE] out,
+	reg ptr	u8[TREE_NODES_1_SIZE] in,
+	reg u64 out_pos,
+	reg u64 in_pos
+) -> reg ptr u8[TREE_NODES_2_SIZE]
+{
+	reg u8 t8;
+
+	inline int z;
+
+	for z=0 to TREE_DATA_SIZE
+	{
+		t8 = in[in_pos + z];
+		out[out_pos + z] = t8;
+	}
+	
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __copy_seed_from_SeedInfo_v1(
+	reg ptr u8[FULL_TREE_SIZE_1] out,
+	reg ptr	u8[SIG_I_SEED_INFO_SIZE] in,
+	reg u64 out_pos,
+	reg u64 in_pos
+) -> reg ptr u8[FULL_TREE_SIZE_1]
+{
+	reg u64 t;
+
+	t = in.[:u64 in_pos];
+	out.[:u64 out_pos] = t;
+
+	t = in.[:u64 in_pos + 8];
+	out.[:u64 out_pos + 8] = t;
+
+	t = in.[:u64 in_pos + 16];
+	out.[:u64 out_pos + 16] = t;
+	
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __copy_seed_from_SeedInfo(
+	reg ptr u8[TREE_NODES_1_SIZE] out,
+	reg ptr	u8[SIG_I_SEED_INFO_SIZE] in,
+	reg u64 out_pos,
+	reg u64 in_pos
+) -> reg ptr u8[TREE_NODES_1_SIZE]
+{
+	reg u64 t;
+
+	t = in.[:u64 in_pos];
+	out.[:u64 out_pos] = t;
+
+	t = in.[:u64 in_pos + 8];
+	out.[:u64 out_pos + 8] = t;
+
+	t = in.[:u64 in_pos + 16];
+	out.[:u64 out_pos + 16] = t;
+	
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __copy_seed_from_sig(
+	reg ptr u8[TREE_NODES_1_SIZE] out,
+	reg u64 in,
+	reg u64 out_pos
+) -> reg ptr u8[TREE_NODES_1_SIZE], reg u64
+{
+	reg u64 t;
+
+	inline int z;
+
+	for z=0 to PNC_U64_SEED_SIZE
+	{
+		t = [in + 0];
+		out.[:u64 out_pos + z*8] = t;
+	
+		in += 8;
+	}
+	
+	return out, in;
+}
+
+#[returnaddress="stack"]
+#[returnadress="stack"]
+fn __copy_seed_from_SeedInfo_2(
+	reg ptr u8[FULL_TREE_SIZE_2] out,
+	reg ptr	u8[PROOF_SEED_INFO_SIZE] in,
+	reg u64 out_pos,
+	reg u64 in_pos
+) -> reg ptr u8[FULL_TREE_SIZE_2]
+{
+	reg u64 t;
+
+	t = in.[:u64 in_pos];
+	out.[:u64 out_pos] = t;
+
+	t = in.[:u64 in_pos + 8];
+	out.[:u64 out_pos + 8] = t;
+
+	t = in.[:u64 in_pos + 16];
+	out.[:u64 out_pos + 16] = t;
+	
+	return out;
+}
+
+
+#[returnaddress="stack"]
+fn __copy_seed_to_proof_v1(
+	reg ptr u8[PNC_N_OPENED_ROUNDS * PROOF_FULL_SIZE] out,
+	reg ptr	u8[FULL_TREE_SIZE_2] in,
+	reg u64 out_pos,
+	reg u64 in_pos
+) -> reg ptr u8[PNC_N_OPENED_ROUNDS * PROOF_FULL_SIZE]
+{
+	reg u8 t;
+
+	inline int z;
+
+	for z=0 to PNC_SEED_SIZE
+	{
+		t = in[in_pos];
+		out[out_pos] = t;
+
+		in_pos += 1;
+		out_pos += 1;
+	}
+	
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __copy_seed_to_proof(
+	#[public]  reg u64 out,
+	#[poly=in] reg ptr u8[TREE_NODES_2_SIZE] in,
+	#[public]  reg u64 in_pos
+) -> reg u64
+{
+	reg u64 t;
+
+	inline int z;
+
+	for z=0 to PNC_U64_SEED_SIZE
+	{
+		t = in[:u64 in_pos + z];
+		[out + 0] = t;
+		out += 8;
+	}
+	
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __copy_tape_aux_to_proof_v1(
+	reg ptr u8[PNC_N_OPENED_ROUNDS * PROOF_FULL_SIZE] out,
+	reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] in,
+	reg 	u64 out_idx,
+	reg 	u64 in_idx
+) ->reg ptr u8[PNC_N_OPENED_ROUNDS * PROOF_FULL_SIZE]
+{
+	reg u8 t8;
+	
+	inline int z;
+
+	for z=0 to PNC_VIEW_SIZE
+	{
+
+		t8 = in[in_idx];
+		out[out_idx] = t8;
+
+		out_idx += 1;
+		in_idx += 1;
+	}
+
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __copy_tape_aux_to_proof(
+	#[public]  reg u64 out,
+	#[poly=in] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] in,
+	#[public]  reg u64 in_idx
+) ->reg u64
+{
+	reg u64 t;
+	
+	inline int z;
+
+	for z=0 to PNC_U64_VIEW_SIZE
+	{
+
+		t = in.[:u64 in_idx + z*8];
+		[out + 0] = t;
+		out += 8;
+	}
+
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __copy_input_to_proof_v1(
+	reg ptr u8[PNC_N_OPENED_ROUNDS * PROOF_FULL_SIZE] out,
+	reg ptr u8[PNC_N_ROUNDS * PNC_INPUT_SIZE] in,
+	reg 	u64 out_idx,
+	reg 	u64 in_idx
+) -> reg ptr u8[PNC_N_OPENED_ROUNDS * PROOF_FULL_SIZE]
+{
+	reg u8 t8;
+	reg u64 i;
+
+	i = 0;
+	while(i < PNC_INPUT_SIZE)
+	{
+
+		t8 = in[in_idx];
+		out[out_idx] = t8;
+
+		out_idx += 1;
+		in_idx += 1;
+		i += 1;
+	}
+
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __copy_input_to_proof(
+	#[public]  reg u64 out,
+	#[poly=in] reg ptr u8[PNC_N_ROUNDS * MZD_SIZE] in,
+	#[public]  reg u64 in_idx
+) -> reg u64
+{
+	reg u64 i t64;
+
+	i = 0;
+	while(i < PNC_U64_INPUT_SIZE)
+	{
+
+		t64 = in.[:u64 in_idx];
+		[out + 0] = t64;
+
+		out += 8;
+		in_idx += 8;
+		i += 1;
+	}
+
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __copy_msgs_to_proof_v1(
+	reg ptr u8[PNC_N_OPENED_ROUNDS * PROOF_FULL_SIZE] out,
+	reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] in,
+	reg 	u64 out_idx,
+	reg 	u64 in_idx
+) -> reg ptr u8[PNC_N_OPENED_ROUNDS * PROOF_FULL_SIZE]
+{
+	reg u8 t8;
+	reg u64 i;
+
+	i = 0;
+	while(i < PNC_VIEW_SIZE)
+	{
+
+		t8 = in[in_idx];
+		out[out_idx] = t8;
+
+		out_idx += 1;
+		in_idx += 1;
+		i += 1;
+	}
+
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __copy_msgs_to_proof(
+	#[public]  reg u64 out,
+	#[poly=in] reg ptr u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] in,
+	#[public]  reg u64 in_idx
+) -> reg u64
+{
+	reg u64 i t;
+
+	i = 0;
+	while(i < PNC_U64_VIEW_SIZE)
+	{
+
+		t = in.[:u64 in_idx];
+		[out + 0] = t;
+
+		in_idx += 8;
+		out += 8;
+		i += 1;
+	}
+
+	return out;
+}
+
+#[returnaddress="stack"]
+fn _copy_unnopened_party_commit(
+	reg ptr u8[COMMITMENTS_FULL_SIZE] out,
+	reg ptr u8[SIG_PROOFS_SIZE] in,
+	reg 	u64 out_idx,
+	reg 	u64 in_idx
+) -> reg ptr u8[COMMITMENTS_FULL_SIZE]
+{
+	reg u8 t8;
+	reg u64 i;
+
+	i = 0;
+	while(i < PNC_DIGEST_SIZE)
+	{
+
+		t8 = in[in_idx];
+		out[out_idx] = t8;
+
+		out_idx += 1;
+		in_idx += 1;
+		i += 1;
+	}
+
+	return out;	
+}
+
+inline
+fn __copy_unnopened_party_commit(
+	stack u8[COMMITMENTS_FULL_SIZE] out,
+	stack u8[SIG_PROOFS_SIZE] in,
+	reg   u64 player round proof_round
+) -> stack u8[COMMITMENTS_FULL_SIZE]
+{
+	reg ptr u8[COMMITMENTS_FULL_SIZE] a;
+	reg ptr u8[SIG_PROOFS_SIZE] b;
+
+	player *= PNC_DIGEST_SIZE;
+    round *= PNC_N_MPC_PARTIES * PNC_DIGEST_SIZE;
+    round += player; 
+
+    proof_round *= PROOF_FULL_SIZE;
+    proof_round += PROOF_C_IDX;
+
+	a = out;
+	b = in;
+	a = _copy_unnopened_party_commit(a, b, round, proof_round);
+	out = a;
+
+	return out;
+}
+
+
+
+#[returnaddress="stack"]
+fn _copy_msg_from_proofs_to_msgs( 
+	reg ptr u8[MSGS_FULL_SIZE] out,
+	reg ptr u8[SIG_PROOFS_SIZE] in,
+	reg 	u64 out_idx,
+	reg 	u64 in_idx
+) -> reg ptr u8[MSGS_FULL_SIZE]
+{
+	reg u64 t;
+	reg u64 i;
+
+	i = 0;
+	while(i < PNC_U64_VIEW_SIZE)
+	{
+
+		t = in.[:u64 in_idx];
+		out.[:u64 out_idx] = t;
+
+		out_idx += 8;
+		in_idx += 8;
+		i += 1;
+	}
+
+	return out;	
+}
+
+inline fn __copy_msg_from_proofs_to_msgs( 
+	stack u8[MSGS_FULL_SIZE] out,
+	stack u8[SIG_PROOFS_SIZE] in,
+	reg 	u64 out_idx,
+	reg 	u64 in_idx
+) -> stack u8[MSGS_FULL_SIZE]
+{
+	reg ptr u8[MSGS_FULL_SIZE] a;
+	reg ptr u8[SIG_PROOFS_SIZE] b;
+
+	a = out;
+	b = in;
+	a = _copy_msg_from_proofs_to_msgs(a, b, out_idx, in_idx);
+	out = a;
+
+	return out;
+}
+
+#[returnaddress="stack"]
+fn __copy_digest_to_tree(
+	reg ptr u8[TREE_NODES_3_SIZE] out,
+	reg u64 in,
+	reg u64 out_pos
+) -> reg ptr u8[TREE_NODES_3_SIZE], reg u64
+{
+	reg u64 t;
+
+	inline int z;
+
+	for z=0 to PNC_U64_DIGEST_SIZE
+	{
+		t = [in + 0];
+		out.[:u64 out_pos + z*8] = t;
+
+		in += 8;
+	}
+
+	return out, in;
+}
+
+#[returnaddress="stack"]
+fn __copy_leaf_to_tree(
+	reg ptr u8[TREE_NODES_3_SIZE] out,
+	reg ptr u8[CV_FULL_SIZE] in,
+	reg u64 out_pos,
+	reg u64 in_pos
+) -> reg ptr u8[TREE_NODES_3_SIZE]
+{
+	reg u64 t;
+
+	inline int z;
+
+	for z=0 to PNC_U64_DIGEST_SIZE
+	{
+		t = in.[:u64 in_pos + z * 8];
+		out.[:u64 out_pos + z * 8] = t;
+	}
+
+	return out;
+}
+
+#[returnaddress="stack"]
+fn _copy_full_tree_v1(
+	reg ptr u8[FULL_TREE_SIZE_2] seeds_tree,
+	reg ptr u8[PNC_N_ROUNDS * FULL_TREE_SIZE_2] seeds,
+	reg 	u64 seeds_tree_idx
+) -> reg ptr u8[FULL_TREE_SIZE_2]
+{
+	reg u8 x;
+	reg u64 t seeds_idx;
+
+	seeds_idx = seeds_tree_idx;
+
+	t = 0;
+	while(t < FULL_TREE_SIZE_2){
+		
+		x = seeds[seeds_idx];
+		seeds_tree[t] = x;
+
+		seeds_idx = seeds_idx + 1;
+		t = t + 1;
+	}
+
+	return seeds_tree;
+}
+
+inline fn __copy_full_tree_v1(
+	stack u8[FULL_TREE_SIZE_2] seeds_tree,
+	reg ptr u8[PNC_N_ROUNDS * FULL_TREE_SIZE_2] seeds,
+	reg 	u64 seeds_tree_idx
+) -> stack u8[FULL_TREE_SIZE_2]
+{
+	reg ptr u8[FULL_TREE_SIZE_2] a;
+
+	a = seeds_tree;
+	a = _copy_full_tree_v1(a, seeds, seeds_tree_idx);
+	seeds_tree = a;
+
+	return seeds_tree;
+}
+
+
+#[returnaddress="stack"]
+fn _copy_full_tree(
+	#[secret] reg ptr u8[TREE_NODES_2_SIZE] seeds_tree,
+	#[public] reg ptr u8[TREE_NUM_NODES_2] seeds_tree_exists,
+	#[secret] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+	#[public] reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] seeds_exists,
+	#[public] reg u64 seeds_tree_idx
+) -> reg ptr u8[TREE_NODES_2_SIZE], reg ptr u8[TREE_NUM_NODES_2]
+{
+	reg u8 x;
+	reg u64 t seeds_idx;
+
+
+	t = 0;
+	seeds_idx = seeds_tree_idx;
+	seeds_idx *= TREE_NODES_2_SIZE;
+	while(t < TREE_NODES_2_SIZE){
+		
+		x = seeds[seeds_idx];
+		seeds_tree[t] = x;
+
+		seeds_idx = seeds_idx + 1;
+		t = t + 1;
+	}
+
+	t = 0;
+	seeds_idx = seeds_tree_idx;
+	seeds_idx *= TREE_NUM_NODES_2;
+	while(t < TREE_NUM_NODES_2)
+	{
+		x = seeds_exists[seeds_idx];
+		seeds_tree_exists[t] = x;
+		t += 1;
+	}
+
+	return seeds_tree, seeds_tree_exists;
+}
+
+inline fn __copy_full_tree(
+	#[secret] stack u8[TREE_NODES_2_SIZE] seeds_tree,
+	#[public] stack u8[TREE_NUM_NODES_2] seeds_tree_exists,
+	#[secret] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+	#[public] reg ptr u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] seeds_exists,
+	#[public] reg u64 seeds_tree_idx
+) -> stack u8[TREE_NODES_2_SIZE], stack u8[TREE_NUM_NODES_2]
+{
+	reg ptr u8[TREE_NODES_2_SIZE] a;
+	reg ptr u8[TREE_NUM_NODES_2] b;
+
+	a = seeds_tree;
+	b = seeds_tree_exists;
+	a, b = _copy_full_tree(a, b, seeds, seeds_exists, seeds_tree_idx);
+	seeds_tree = a;
+	seeds_tree_exists = b;
+
+	return seeds_tree, seeds_tree_exists;
+}
+
+inline fn __copy_input_seed_v1(
+	stack u8[FULL_TREE_SIZE_2] output, 
+	stack u8[TREE_NODES_1_SIZE] iSeedsTree, 
+	reg u64 base_seeds
+) -> stack u8[FULL_TREE_SIZE_2]
+{
+	reg u64 t;
+
+	t = iSeedsTree.[:u64 base_seeds];
+	output[:u64 0] = t;
+	base_seeds += 8;
+
+	t = iSeedsTree.[:u64 base_seeds];
+	output[:u64 1] = t;
+	base_seeds += 8;
+
+	t = iSeedsTree.[:u64 base_seeds];
+	output[:u64 2] = t;
+	base_seeds += 8;
+
+	return output;
+}
+
+/*
+fn _copy_input_seed2(
+	#[poly=iSeedsTree] reg ptr u8[TREE_NODES_2_SIZE] output,
+	#[poly=iSeedsTree] reg ptr u8[TREE_NODES_1_SIZE] input,
+	#[public]          reg u64 in_idx
+) -> reg ptr u8[TREE_NODES_2_SIZE]
+{
+	reg u64 t;
+
+	inline int z;
+
+	for z=0 to PNC_U64_SEED_SIZE
+	{
+		t = input.[:u64 in_idx + z * 8];
+		output.[:u64 z * 8] = t;
+
+	}
+
+	return output;
+}
+*/
+inline
+fn __copy_input_seed2(
+	#[poly=iSeedsTree] reg ptr u8[TREE_NODES_2_SIZE] output,
+	#[poly=iSeedsTree] reg ptr u8[TREE_NODES_1_SIZE] input,
+	#[public]          reg u64 round
+) -> reg ptr u8[TREE_NODES_2_SIZE]
+{
+	reg u64 idx;
+	reg ptr u8[PNC_SEED_SIZE] out in;
+
+	idx = round;
+	idx += GET_LEAVES_1;
+	idx *= PNC_INPUT_SIZE;
+
+	in = input[idx: PNC_SEED_SIZE];
+	out = output[0: PNC_SEED_SIZE];
+	out = _memcpy_3Words(out,in);
+	output[0: PNC_SEED_SIZE] = out;
+
+	return output;
+}
+
+inline fn __copy_full_tree_to_trees_v1(
+	stack u8[PNC_N_ROUNDS * FULL_TREE_SIZE_2] seeds,
+	stack u8[FULL_TREE_SIZE_2] seeds_tree, 
+	reg u64 base_seeds
+) -> stack u8[PNC_N_ROUNDS * FULL_TREE_SIZE_2]
+{
+	reg u8 t;
+	reg u64 idx;
+
+	idx = 0;
+	while(idx < FULL_TREE_SIZE_2){
+		t = seeds_tree[ idx];
+		seeds[ base_seeds] = t;
+
+		base_seeds = base_seeds + 1;
+		idx = idx + 1;
+	}
+
+	return seeds;
+}
+
+inline fn __copy_full_tree_to_trees(
+	#[secret] stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+	#[public] stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] seeds_have,
+	#[public] stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] seeds_exists,
+	#[secret] stack u8[TREE_NODES_2_SIZE] seeds_tree,
+	#[public] stack u8[TREE_NUM_NODES_2] seeds_tree_have,
+	#[public] stack u8[TREE_NUM_NODES_2] seeds_tree_exists,
+	#[public] reg u64 base_seeds
+) -> stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE],
+	 stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2],
+	 stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2]
+{
+	reg u8 t;
+	reg u64 idx i;
+
+	idx = 0;
+	i = base_seeds;
+	i *= TREE_NUM_NODES_2;
+	while(idx < TREE_NUM_NODES_2){
+		t = seeds_tree_have[idx];
+		seeds_have[i] = t;	
+
+		t = seeds_tree_exists[idx];
+		seeds_exists[i] = t;
+
+		i += 1;
+		idx = idx + 1;
+	}
+
+	idx = 0;
+	i = base_seeds;
+	i *= TREE_NODES_2_SIZE;
+	while(idx < TREE_NODES_2_SIZE){
+		t = seeds_tree[ idx];
+		seeds[i] = t;
+
+		i += 1;
+		idx = idx + 1;
+	}
+
+	return seeds, seeds_have, seeds_exists;
+}
+
+inline fn __copy_round_tapes_to_tapes(
+	reg ptr u8[TAPES_FULL_SIZE] tapes,
+	stack u8[TAPES_FULL_SIZE] round_tapes
+) -> reg ptr u8[TAPES_FULL_SIZE]
+{
+	reg u64 idx t;
+
+	idx = 0;
+	while(idx < TAPES_U64_FULL_SIZE){
+		t = round_tapes.[:u64 idx*8];
+		tapes.[:u64 idx*8] = t;
+
+		idx += 1;
+	}
+
+	return tapes;
+}
+
+inline fn __copy_round_tapes_from_tapes(
+	#[poly=tapes] stack u8[TAPES_FULL_SIZE] round_tapes,
+	#[poly=tapes] stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+	#[public]     reg u64 base_tapes
+) -> stack u8[TAPES_FULL_SIZE]
+{
+	reg u64 idx t;
+
+	idx = 0;
+	while(idx < TAPES_FULL_SIZE){
+		t = tapes.[:u64 base_tapes];
+		round_tapes.[:u64 idx] = t;
+		
+
+		base_tapes += 8;
+		idx = idx + 8;
+	}
+
+	return round_tapes;
+}
+
+inline fn __copy_round_msgs_from_msgs(
+	#[poly=input] stack u8[MSGS_FULL_SIZE] output,
+	#[poly=input] stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] input,
+	#[public]     reg u64 idx
+) -> stack u8[MSGS_FULL_SIZE]
+{
+	reg u64 t x;
+
+	t = 0;
+	while(t < MSGS_U64_FULL_SIZE){
+		x = input.[:u64  idx];
+		output[:u64  t] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+inline fn __copy_round_msgs_to_msgs(
+	#[poly=round_msgs] stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+	#[poly=round_msgs] stack u8[MSGS_FULL_SIZE] round_msgs,
+	#[public]          reg u64 base_msgs
+) -> stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+	reg u64 t idx;
+
+	idx = 0;
+	while(idx < MSGS_U64_FULL_SIZE){
+		t = round_msgs[:u64 idx];
+		msgs.[:u64 base_msgs] = t;
+
+		base_msgs = base_msgs + 8;
+		idx = idx + 1;
+	}
+
+	return msgs;
+}
+
+fn _copy_tapes_aux(
+	#[poly=tapes] reg ptr u8[TAPE_AUX_SIZE] tapes_aux,
+	#[poly=tapes] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+	#[public]     reg u64 tapes_aux_idx
+) -> reg ptr u8[TAPE_AUX_SIZE]
+{
+	reg u8 x;
+	reg u64 t idx;
+
+	t = 0;
+	idx = tapes_aux_idx;
+	while(t < TAPE_AUX_SIZE)
+	{
+		x = tapes[ idx];
+		tapes_aux[ t] = x;
+
+		idx = idx + 1;
+		t = t + 1;
+	}
+
+	return tapes_aux;
+}
+
+inline fn __copy_tapes_aux(
+	#[poly=tapes] stack u8[TAPE_AUX_SIZE] tapes_aux,
+	#[poly=tapes] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+	#[public]     reg u64 tapes_aux_idx
+) -> stack u8[TAPE_AUX_SIZE]
+{
+	reg ptr u8[TAPE_AUX_SIZE] a;
+
+	a = tapes_aux;
+	a = _copy_tapes_aux(a, tapes, tapes_aux_idx);
+	tapes_aux = a;
+
+	return tapes_aux;
+}
+
+
+inline fn __copy_input_mask_from_input_masks(
+	#[poly=input] stack u8[MZD_SIZE] output,
+	#[poly=input] stack u8[PNC_N_ROUNDS * MZD_SIZE] input,
+	#[public]     reg u64 idx
+) -> stack u8[MZD_SIZE]
+{
+	reg u64 t;
+
+	t = input.[:u64 idx];
+	output[:u64 0] = t;
+	idx = idx + 8;
+
+	t = input.[:u64 idx];
+	output[:u64 1] = t;
+	idx = idx + 8;
+
+	t = input.[:u64 idx];
+	output[:u64 2] = t;
+
+	return output;
+}
+
+
+inline fn __copy_input_mask_to_input_masks(
+	#[poly=input] stack u8[PNC_N_ROUNDS * MZD_SIZE] output,
+	#[poly=input] stack u8[MZD_SIZE] input,
+	#[public]     reg u64 idx
+) -> stack u8[PNC_N_ROUNDS * MZD_SIZE]
+{
+	reg u64 t;
+
+	t = input[:u64 0];
+	output.[:u64 idx] = t;
+	idx = idx + 8;
+
+	t = input[:u64 1];
+	output.[:u64 idx] = t;
+	idx = idx + 8;
+
+	t = input[:u64 2];
+	output.[:u64 idx] = t;
+
+	return output;
+}
+
+inline fn __copy_ch_x4_from_chs(
+	  stack u8[X4_ROUNDS * CH_ROUND_SIZE] output,
+	  stack u8[PNC_N_ROUNDS * CH_ROUND_SIZE] input,
+	      reg u64 idx
+) -> stack u8[X4_ROUNDS * CH_ROUND_SIZE]
+{
+	reg u64 t x;
+
+	t = 0;
+	while(t < X4_ROUNDS * CH_U64_ROUND_SIZE){
+		x = input.[:u64 idx];
+		output[:u64 t] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+inline fn __copy_ch_x4_to_chs(
+	  stack u8[PNC_N_ROUNDS * CH_ROUND_SIZE] output,
+	  stack u8[X4_ROUNDS * CH_ROUND_SIZE] input,
+	      reg u64 idx
+) -> stack u8[PNC_N_ROUNDS * CH_ROUND_SIZE]
+{
+	reg u64 t x;
+
+	t = 0;
+	while(t < X4_ROUNDS * CH_U64_ROUND_SIZE){
+		x = input[:u64 t];
+		output.[:u64 idx] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+inline fn __copy_c_x4_from_cs(
+	  stack u8[X4_ROUNDS * COMMITMENTS_SIZE] output,
+	  stack u8[PNC_N_ROUNDS * COMMITMENTS_SIZE] input,
+	      reg u64 idx
+) -> stack u8[X4_ROUNDS * COMMITMENTS_SIZE]
+{
+	reg u64 t x;
+	
+	t = 0;
+	while(t < X4_ROUNDS * COMMITMENTS_U64_SIZE){
+		x = input.[:u64 idx];
+		output[:u64 t] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+inline fn __copy_cv_x4_from_cvs(
+	   stack u8[X4_ROUNDS * CV_ROUND_SIZE] output,
+	   stack u8[PNC_N_ROUNDS * CV_ROUND_SIZE] input,
+	        reg u64 idx
+) -> stack u8[X4_ROUNDS * CV_ROUND_SIZE]
+{
+	reg u64 t x;
+
+	t = 0;
+	while(t < X4_ROUNDS * CV_U64_ROUND_SIZE){
+		x = input.[:u64 idx];
+		output[:u64 t] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+inline fn __copy_cv_x4_to_cvs(
+	  stack u8[PNC_N_ROUNDS * CV_ROUND_SIZE] output,
+	  stack u8[X4_ROUNDS * CV_ROUND_SIZE] input,
+	      reg u64 idx
+) -> stack u8[PNC_N_ROUNDS * CV_ROUND_SIZE]
+{
+	reg u64 t x;
+
+	t = 0;
+	while(t < X4_ROUNDS * CV_U64_ROUND_SIZE){
+		x = input[:u64 t];
+		output.[:u64 idx] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+inline fn __copy_input_x4_from_inputs(
+	#[poly=input] stack u8[X4_ROUNDS * MZD_SIZE] output,
+	#[poly=input] stack u8[PNC_N_ROUNDS * MZD_SIZE] input,
+	#[public]     reg u64 idx
+) -> stack u8[X4_ROUNDS * MZD_SIZE]
+{
+	reg u64 t x;
+
+	t = 0;
+	while(t < X4_ROUNDS * MZD_U64_SIZE){
+		x = input.[:u64 idx];
+		output[:u64 t] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+inline fn __copy_msgs_x4_from_msgs(
+	#[poly=input] stack u8[X4_ROUNDS * MSGS_FULL_SIZE] output,
+	#[poly=input] stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] input,
+	#[public]     reg u64 idx
+) -> stack u8[X4_ROUNDS * MSGS_FULL_SIZE]
+{
+	reg u64 t x;
+
+	t = 0;
+	while(t < X4_ROUNDS * MSGS_U64_FULL_SIZE){
+		x = input.[:u64 idx];
+		output[:u64 t] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+
+inline fn __copy_ch_from_chs(
+	  stack u8[CH_ROUND_SIZE] output,
+	  stack u8[PNC_N_ROUNDS * CH_ROUND_SIZE] input,
+	      reg u64 idx
+) -> stack u8[CH_ROUND_SIZE]
+{
+	reg u64 t x;
+
+	t = 0;
+	while(t < CH_U64_ROUND_SIZE){
+		x = input.[:u64 idx];
+		output[:u64 t] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+inline fn __copy_ch_to_chs(
+	  stack u8[PNC_N_ROUNDS * CH_ROUND_SIZE] output,
+	  stack u8[CH_ROUND_SIZE] input,
+	      reg u64 idx
+) -> stack u8[PNC_N_ROUNDS * CH_ROUND_SIZE]
+{
+	reg u64 t x;
+
+	t = 0;
+	while(t < CH_U64_ROUND_SIZE){
+		x = input[:u64 t];
+		output.[:u64 idx] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+inline fn __copy_c_from_cs(
+	  stack u8[COMMITMENTS_SIZE] output,
+	  stack u8[PNC_N_ROUNDS * COMMITMENTS_SIZE] input,
+	      reg u64 idx
+) -> stack u8[COMMITMENTS_SIZE]
+{
+	reg u64 t x;
+	
+	t = 0;
+	while(t < COMMITMENTS_U64_SIZE){
+		x = input.[:u64 idx];
+		output[:u64 t] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+inline fn __copy_cv_from_cvs(
+	  stack u8[CV_ROUND_SIZE] output,
+	  stack u8[PNC_N_ROUNDS * CV_ROUND_SIZE] input,
+	      reg u64 idx
+) -> stack u8[CV_ROUND_SIZE]
+{
+	reg u64 t x;
+
+	t = 0;
+	while(t < CV_U64_ROUND_SIZE){
+		x = input.[:u64 idx];
+		output[:u64 t] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+inline fn __copy_cv_to_cvs(
+	  stack u8[PNC_N_ROUNDS * CV_ROUND_SIZE] output,
+	  stack u8[CV_ROUND_SIZE] input,
+	      reg u64 idx
+) -> stack u8[PNC_N_ROUNDS * CV_ROUND_SIZE]
+{
+	reg u64 t x;
+
+	t = 0;
+	while(t < CV_U64_ROUND_SIZE){
+		x = input[:u64 t];
+		output.[:u64 idx] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+inline fn __copy_input_from_inputs(
+	#[poly=input] stack u8[MZD_SIZE] output,
+	#[poly=input] stack u8[PNC_N_ROUNDS * MZD_SIZE] input,
+	#[public]     reg u64 idx
+) -> stack u8[MZD_SIZE]
+{
+	reg u64 t x;
+
+	t = 0;
+	while(t < MZD_U64_SIZE){
+		x = input.[:u64 idx];
+		output[:u64 t] = x;
+
+		idx = idx + 8;
+		t = t + 1;
+	}
+
+	return output;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+

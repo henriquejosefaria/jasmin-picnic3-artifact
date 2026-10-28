@@ -1,0 +1,46 @@
+require "new_keccak_avx2.jinc"
+
+
+inline
+fn __commit(
+  stack u8[COMMITMENTS_FULL_SIZE] commitments,
+  stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes, 
+  stack u8[PNC_SALT_SIZE] salt,
+  reg u64 round,
+  reg u16 player
+) -> stack u8[COMMITMENTS_FULL_SIZE]
+{
+  reg u64 idx0 idx1;
+
+  reg ptr u8[COMMITMENT_SIZE] a;
+  reg ptr u8[TREE_DATA_SIZE] b;
+  reg ptr u8[TAPE_AUX_SIZE] c; 
+  reg ptr u8[PNC_SALT_SIZE] d;
+
+  idx0 = round;
+  idx0 *= TREE_NODES_2_SIZE;
+  idx1 = (64u) player;
+  idx0 += GET_LEAVES_2 * PNC_INPUT_SIZE;
+  idx1 *= PNC_INPUT_SIZE;
+  idx0 += idx1;
+  b = seeds[idx0: TREE_DATA_SIZE];
+
+  idx1 = round;
+  idx1 *= COMMITMENTS_SIZE;
+  idx0 = (64u) player;
+  idx0 *= COMMITMENT_SIZE;
+  idx1 += idx0;
+  a = commitments[idx1: COMMITMENT_SIZE]; 
+
+  idx0 = round;
+  idx0 *= TAPES_FULL_SIZE;
+  idx0 += TAPE_AUX_IDX;
+  c = tapes[idx0: TAPE_AUX_SIZE];
+
+  d = salt;
+  a = _commit(a, b, c, d, round, player);
+  commitments[idx1: COMMITMENT_SIZE] = a;
+
+  return commitments;
+}

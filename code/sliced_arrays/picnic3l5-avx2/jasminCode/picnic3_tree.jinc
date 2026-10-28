@@ -1,0 +1,213 @@
+require "params.jinc"
+require "copy.jinc"
+require "picnic3_tree_aux.jinc"
+
+
+/*
+ * This function copies the root seed of a nibary tree
+ * from one of iSeedsTree' leaves and expands that seed
+ * ultill it has 1 leave per player.
+ */
+fn _buildTree2(
+	#[secret] reg ptr u8[TREE_NODES_2_SIZE] seeds,
+	#[public] reg ptr u8[TREE_NUM_NODES_2] seeds_have,
+	#[public] reg ptr u8[TREE_NUM_NODES_2] seeds_exists,
+	  #[secret] reg ptr u8[TREE_NODES_1_SIZE] iSeedsTree,
+	#[secret]           reg ptr u8[PNC_SALT_SIZE] salt, 
+	#[public] 		  reg u64 round
+) -> reg ptr u8[TREE_NODES_2_SIZE], reg ptr u8[TREE_NUM_NODES_2], reg ptr u8[TREE_NUM_NODES_2]
+{
+	reg u64 out_idx;
+	stack u64 s_round;
+
+	stack ptr u8[PNC_SALT_SIZE] s_salt;
+
+	s_salt = salt;
+	s_round = round;
+	seeds = __copy_input_seed2(seeds, iSeedsTree, round);
+
+	salt = s_salt;
+	out_idx = s_round;
+	seeds, seeds_have, seeds_exists
+		= _expandSeeds_2(seeds, seeds_have, seeds_exists, salt, out_idx);
+
+	return seeds, seeds_have, seeds_exists;
+}
+
+/*
+ * This function copies the commitments over the players
+ * views produced in the online phase and sets them as 
+ * leaves for a Merkle Tree. It them computes its root node.
+ */
+inline 
+fn __buildMerkleTree(
+	#[secret] stack u8[TREE_NODES_3_SIZE] tree,
+	#[public] stack u8[TREE_NUM_NODES_3] tree_have,
+	#[public] stack u8[TREE_NUM_NODES_3] tree_exists,
+	#[secret] stack u8[PNC_N_ROUNDS * CV_ROUND_SIZE] leafData,
+	#[secret] stack u8[PNC_SALT_SIZE] salt
+) -> stack u8[TREE_NODES_3_SIZE], stack u8[TREE_NUM_NODES_3], stack u8[TREE_NUM_NODES_3]
+{
+
+	reg u64 firstLeaf i have_node_idx;
+	reg u256 ymm0;
+
+	stack u64 s_i;
+
+	firstLeaf = TREE_NUM_NODES_3 - TREE_NUM_LEAVES_3;
+
+	/* Copy data to the leaves. The actual data being committed to has already been
+     * hashed, according to the spec. */
+
+    i = 0;
+    have_node_idx = firstLeaf;
+    firstLeaf *= PNC_DIGEST_SIZE;
+    while(i < TREE_NUM_LEAVES_3 * PNC_DIGEST_SIZE)
+    {
+   		ymm0 = leafData.[:u256 i];
+   		tree.[:u256 firstLeaf] = ymm0;
+
+   		firstLeaf += 32;
+   		i += 32;
+    }
+
+    while(have_node_idx < TREE_NUM_NODES_3)
+    {
+	   	tree_have[have_node_idx] = 1;
+	   	have_node_idx += 1;
+	}
+
+   /* Starting at the leaves, work up the tree, computing the hashes for intermediate nodes */
+   i = TREE_NUM_NODES_3 - 1;
+
+   while(i > 0)
+   {
+   		s_i = i;
+
+   		tree, tree_have, tree_exists = 
+   			__computeParentHash(tree, tree_have, tree_exists, i, salt);
+
+   		i = s_i;
+   		i -= 1;
+
+   }
+
+   return tree, tree_have, tree_exists;
+}
+
+/*
+ * This function serializes the missing nodes the verifier 
+ * will require to check commitments for non-missing leaves
+ */
+fn _openMerkleTree(
+	#[poly=tree] reg ptr u8[TREE_NODES_3_SIZE] tree,
+	#[public]    reg ptr u64[REVEALED_SIZE] revealed,
+	#[public]    reg u64 revealedSize,
+	#[public]    reg u64 sig
+) -> reg u64
+{
+
+	reg u64 i pos t64;
+
+	/* Serialize output */	
+	i= 0;
+	pos = 0;
+	while(i < revealedSize)
+	{
+		t64 = revealed[i];
+		t64 *= PNC_DIGEST_SIZE;
+		sig = __copy_digest_from_tree_v2(sig, tree, t64);
+
+		i += 1;
+	}
+	
+	return sig;
+}
+
+/*
+ * This function uses the challenge to compute the Merkle tree
+ * nodes to include in the signature.
+ */
+fn _revealSeeds(
+	#[poly=tree] reg ptr u8[TREE_NODES_1_SIZE] tree,
+	#[public]    reg ptr u8[TREE_NUM_NODES_1] tree_exists,
+	#[public]    reg ptr u8[SIG_CHALLENGE_C_SIZE] challengeC,
+	#[public]    reg u64 sig
+) -> reg u64
+{
+	reg u16 outLen;
+	reg u64 revealedSize i in_pos;
+
+	stack u64[REVEALED_SIZE] revealed;
+
+	reg ptr u8[SIG_CHALLENGE_C_SIZE] reg_challenge_c;
+
+	revealedSize = 0;
+
+	reg_challenge_c = challengeC;
+	revealed, revealedSize = __getRevealedNodes(revealed, tree_exists, reg_challenge_c, revealedSize);
+
+	i = 0;
+	outLen = 0;
+	while(i < revealedSize)
+	{
+		in_pos = revealed[i];
+		in_pos *= PNC_SEED_SIZE;
+		sig = __copy_seed_to_sig(sig, tree, in_pos);
+
+		i += 1;
+	}
+
+	return sig;
+}
+
+/*
+ * This function uses a list of "hidden" players per round
+ * to choose which round tree nodes it can not include in the proof.
+ */
+#[returnaddress="stack"]
+fn _revealSeeds_2(
+	#[poly=_tree] reg const ptr u8[TREE_NODES_2_SIZE] tree,
+	#[public]     reg const ptr u8[TREE_NUM_NODES_2] tree_exists,
+	#[public]     reg u64 sig,
+	#[public]     reg u16 hideList
+) -> reg u64
+{
+	reg u64 revealedSize i in_pos;
+	
+	stack u64 s_revealedSize s_sig;
+
+	stack u64[REVEALED_SIZE_2] revealed;
+
+	stack ptr u8[TREE_NODES_2_SIZE] s_tree;
+	stack ptr u8[TREE_NUM_NODES_2] s_tree_exists;
+
+	s_sig = sig;
+
+	s_tree = tree;
+	
+	revealed, revealedSize = 
+		_getRevealedNodes_2(revealed, tree_exists, hideList);
+	s_tree_exists = tree_exists;
+
+	sig = s_sig;
+	
+	i = 0;
+	while(i < revealedSize)
+	{
+		s_revealedSize = revealedSize;
+		in_pos = revealed[i];
+		in_pos *= PNC_U64_SEED_SIZE;
+
+		tree = s_tree;
+		sig = __copy_seed_to_proof(sig, tree, in_pos);
+
+		revealedSize = s_revealedSize;
+		i += 1;
+	}
+	
+	return sig;
+}
+
+
+  

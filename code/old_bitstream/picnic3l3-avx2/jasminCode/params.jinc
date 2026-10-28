@@ -1,0 +1,454 @@
+/***************************/
+/*    COMMON PARAMETERS    */
+/***************************/
+
+	param int U8 = 1;
+	param int U16 = 2;
+	param int U32 = 4;
+	param int U64 = 8;
+	param int WORD_SIZE = 8;
+
+	param int X4_ROUNDS = 4;
+
+
+
+/***************************/
+/*     MZD PARAMETERS      */
+/***************************/
+
+
+	/* BYTES */
+
+		param int MZD_SIZE = 32;       // We use 3 of the 4 u64 words
+		param int MZD_FILL_SIZE = 8;  // Last u64 word
+
+
+	/* 8 BYTE WORDS */
+
+		param int MZD_U64_SIZE = 4; // We use 3 of the 4 u64 words
+
+
+
+
+/***************************/
+/*    KECCAK PARAMETERS    */
+/***************************/
+
+	param int SHAKE256_U64_RATE = 17;
+
+	param int _KECCAK_ROUNDS = 24;
+	param int SHAKE256_RATE = 136;
+
+	param int HASH_PREFIX_0 = 0;
+	param int HASH_PREFIX_1 = 1;
+	param int HASH_PREFIX_2 = 2;
+	param int HASH_PREFIX_3 = 3;
+	param int HASH_PREFIX_4 = 4;
+	param int HASH_PREFIX_5 = 5;
+
+
+
+/***************************/
+/*     LOWMC PARAMETERS    */
+/***************************/
+
+	param int LOWMC_M_BITS = 64;
+	param int LOWMC_N_BITS = 192;
+	param int LOWMC_K_BITS = 192;
+
+	param int LOWMC_U8_M = 8;
+	param int LOWMC_U8_N = 24;
+	param int LOWMC_U8_K = 24;
+
+	param int LOWMC_U64_M = 1;
+	param int LOWMC_U64_N = 3;
+	param int LOWMC_U64_K = 3;
+
+
+	param int LOWMC_R = 4;
+
+
+	param int MASK_SIZE 		  = 4;
+	param int RC_ROUND 			  = 4;
+	param int ROUND_CONSTANT_SIZE = MZD_SIZE * RC_ROUND;
+
+	param int MATRIX_ROUND 		  = 768;
+	param int K_MATRIX_SIZE		  = MATRIX_ROUND * 5;
+	param int L_MATRIX_SIZE 	  = MATRIX_ROUND * 4;
+	param int LI_MATRIX_SIZE      = MATRIX_ROUND * 4;
+
+
+	param int WORD_NUMBER = 4;
+
+
+
+/***************************/
+/*    PICNIC PARAMETERS    */
+/***************************/
+
+	/* FIX PARAMETERS */
+
+		param int PNC_N_ROUNDS 						 = 419;
+		param int PNC_N_X4_ROUNDS                    = 104; // 416 rounds
+		param int PNC_N_OPENED_ROUNDS 				 = 52;
+		param int PNC_N_MPC_PARTIES 				 = 16;
+		param int PNC_COLLAPSED_CHALLENGE_SIZE		 = 83;
+		param int PNC_UNRUH_WITHOUT_INPUT_BYTES_SIZE = 0;
+		param int PNC_UNRUH_WITH_INPUT_BYTES_SIZE    = 0;
+		param int PNC_MAX_SIGNATURE_SIZE 		     = 35024;
+		param int PNC_MESSAGE_BYTE_LENGTH 		     = 13;
+		param int PNC_PLAINTEXT_SIZE 			     = 32;
+		param int PNC_PUBKEY_SIZE	 			     = 32;
+		param int CHALLENGE_C_SIZE 					 = PNC_N_OPENED_ROUNDS * U16;
+		param int CHALLENGE_P_SIZE 					 = PNC_N_OPENED_ROUNDS * U16;
+
+		param int MAX_SEED_SIZE_BYTES 				 = 32;
+		param int MAX_SEED_SIZE_BYTES_U64			 = 4;
+
+		param int LAST_PLAYER = PNC_N_MPC_PARTIES - 1;
+
+
+	/* BYTES */
+
+		param int PNC_DIGEST_SIZE = 48;
+		param int PNC_SEED_SIZE = 24;
+		param int PNC_INPUT_SIZE = 24;
+		param int PNC_OUTPUT_SIZE = 24;
+		param int PNC_VIEW_SIZE = 96;
+		param int PNC_VIEW_ROUND_SIZE = 192;
+
+		param int PNC_SALT_SIZE = 32;
+		param int PNC_ROOT_SIZE = 24;
+		param int PNC_SALT_AND_ROOT_LENGTH = 56; // SALT_SIZE + ROOT_SIZE;
+
+
+	/* 8 BYTE WORDS */
+
+		param int PNC_U64_DIGEST_SIZE = 6;
+		param int PNC_U64_SEED_SIZE = 3;
+		param int PNC_U64_INPUT_SIZE = 3;
+		param int PNC_U64_OUTPUT_SIZE = 3;
+		param int PNC_U64_VIEW_SIZE = 12;
+		param int PNC_U64_VIEW_ROUND_SIZE = 24;
+
+		param int PNC_U64_SALT_SIZE = 4;
+		param int PNC_U64_ROOT_SIZE = 3;
+		param int PNC_U64_SALT_AND_ROOT_LENGTH = 7;
+
+
+
+/***************************/
+/*     TREE PARAMETERS     */
+/***************************/
+
+
+	/* TREES COMMON PARAMS U8 */
+
+		param int TREE_DATA_SIZE = 24;
+		param int TREE_VAL = 8;
+		param int MISSING_LEAVES_SIZE = PNC_N_ROUNDS - PNC_N_OPENED_ROUNDS;
+		param int CV_INFO_SIZE = PNC_N_ROUNDS * PNC_DIGEST_SIZE;
+		param int REVEALED_SIZE = 419 * WORD_SIZE;
+		param int REVEALED_SIZE_2 = 16 * WORD_SIZE;
+
+
+	/* TREES COMMON PARAMS U64 */
+
+		param int TREE_DATA_U64_SIZE = 3;
+		param int CV_INFO_U64_SIZE = PNC_N_ROUNDS * TREE_DATA_U64_SIZE;
+
+
+	/* BIG TREE PARAMS U8 */
+
+		param int TREE_DEPTH_1      = 10; 
+		param int TREE_NUM_NODES_1  = 930;
+		param int TREE_NUM_LEAVES_1 = 419;
+
+		param int TREE_NODES_1      = 0;
+		param int TREE_NODES_1_SIZE = TREE_NUM_NODES_1 * TREE_DATA_SIZE;
+		param int TREE_HAVE_NODE_1  = TREE_NODES_1_SIZE;
+		param int TREE_EXISTS_1     = TREE_NUM_NODES_1 * TREE_DATA_SIZE + TREE_NUM_NODES_1;
+
+		param int FULL_TREE_SIZE_1  = TREE_NUM_NODES_1 * TREE_DATA_SIZE + TREE_NUM_NODES_1 * 2;
+
+		param int GET_LEAVES_1 =  TREE_NUM_NODES_1 - TREE_NUM_LEAVES_1;
+
+
+	/* SMALL TREE PARAMS U8 */
+
+		param int TREE_DEPTH_2      = 5;
+		param int TREE_NUM_NODES_2  = 31;
+		param int TREE_NUM_LEAVES_2 = 16;
+
+		param int TREE_NODES_2      = 0;
+		param int TREE_NODES_2_SIZE = TREE_NUM_NODES_2 * TREE_DATA_SIZE;
+		param int TREE_HAVE_NODE_2  = TREE_NODES_2_SIZE;
+		param int TREE_EXISTS_2     = TREE_NUM_NODES_2 * TREE_DATA_SIZE + TREE_NUM_NODES_2;
+
+		param int FULL_TREE_SIZE_2  = TREE_NUM_NODES_2 * TREE_DATA_SIZE + TREE_NUM_NODES_2 * 2;
+
+		param int GET_LEAVES_2 =  TREE_NUM_NODES_2 - TREE_NUM_LEAVES_2;
+
+
+	/* MERKLE TREE PARAMS U8 */
+
+		param int TREE_DEPTH_3      = 10; 
+		param int TREE_NUM_NODES_3  = 930;
+		param int TREE_NUM_LEAVES_3 = 419;
+
+		param int TREE_NODES_3      = 0;
+		param int TREE_NODES_3_SIZE = TREE_NUM_NODES_3 * PNC_DIGEST_SIZE;
+		param int TREE_HAVE_NODE_3  = TREE_NODES_3_SIZE;
+		param int TREE_EXISTS_3     = TREE_NUM_NODES_3 * PNC_DIGEST_SIZE + TREE_NUM_NODES_3;
+
+		param int FULL_TREE_SIZE_3  = TREE_NUM_NODES_3 * PNC_DIGEST_SIZE + TREE_NUM_NODES_3 * 2;
+		param int FULL_U64_TREE_SIZE_3 = FULL_TREE_SIZE_3 / 8;
+
+		param int GET_LEAVES_3 =  TREE_NUM_NODES_3 - TREE_NUM_LEAVES_3;
+
+
+
+/***************************/
+/*     TAPE PARAMETERS     */
+/***************************/
+
+
+
+	/* TAPES COMMON PARAMS */
+
+		param int N_TAPES         = PNC_N_MPC_PARTIES;
+		param int TAPE_SIZE_BYTES = 2 * PNC_VIEW_SIZE;
+
+
+
+	/* TAPES BYTES PARAMS */
+
+		param int TAPE_TAPES_SIZE 		= N_TAPES * TAPE_SIZE_BYTES;
+		param int TAPE_AUX_SIZE         = PNC_VIEW_SIZE; 
+		param int TAPE_BUFFER_SIZE      = 32;
+		param int TAPE_PARITY_TAPE_SIZE = 2 * PNC_VIEW_SIZE;
+
+		param int TAPE_TAPES_IDX 	   = 0;
+		param int TAPE_AUX_IDX         = TAPE_TAPES_IDX + TAPE_TAPES_SIZE;
+		param int TAPE_BUFFER_IDX      = TAPE_AUX_IDX + TAPE_AUX_SIZE;
+		param int TAPE_PARITY_TAPE_IDX = TAPE_BUFFER_IDX + TAPE_BUFFER_SIZE;
+
+
+		param int TAPES_FULL_SIZE = TAPE_PARITY_TAPE_IDX + TAPE_PARITY_TAPE_SIZE;
+
+
+
+	/* TAPES WORDS PARAMS (U64) */
+
+		param int TAPE_U64_SIZE_BYTES = TAPE_SIZE_BYTES >> 3;
+		param int TAPE_U64_BUFFER_SIZE = TAPE_BUFFER_SIZE >> 3; 
+
+		param int TAPES_U64_FULL_SIZE = TAPES_FULL_SIZE >> 3;
+
+
+
+
+/***************************/
+/*  COMMITMENT PARAMETERS  */
+/***************************/
+
+
+	param int COMMITMENT_SIZE = PNC_DIGEST_SIZE;
+	param int COMMITMENTS_SIZE = COMMITMENT_SIZE * PNC_N_MPC_PARTIES;
+	param int COMMITMENTS_FULL_SIZE = COMMITMENTS_SIZE * PNC_N_ROUNDS;
+
+	param int COMMITMENT_U64_SIZE = PNC_U64_DIGEST_SIZE;
+	param int COMMITMENTS_U64_SIZE = COMMITMENT_U64_SIZE * PNC_N_MPC_PARTIES; 
+	param int COMMITMENTS_U64_FULL_SIZE = COMMITMENTS_U64_SIZE * PNC_N_ROUNDS;
+
+
+
+/***************************/
+/*     MSGS PARAMETERS     */
+/***************************/
+
+
+	param int MSGS_FULL_SIZE = PNC_N_MPC_PARTIES * PNC_VIEW_SIZE;
+
+	param int MSGS_U64_FULL_SIZE = PNC_N_MPC_PARTIES * PNC_U64_VIEW_SIZE;
+
+
+
+/***************************/
+/*  COMMITMENT PARAMETERS  */
+/***************************/
+
+
+	param int CH_ROUND_SIZE = PNC_DIGEST_SIZE;
+	param int CH_U64_ROUND_SIZE = PNC_U64_DIGEST_SIZE;
+
+	param int CH_FULL_SIZE = CH_ROUND_SIZE * PNC_N_ROUNDS;
+
+
+	param int CV_ROUND_SIZE = PNC_DIGEST_SIZE;
+	param int CV_U64_ROUND_SIZE = PNC_U64_DIGEST_SIZE;
+
+	param int CV_FULL_SIZE = CV_ROUND_SIZE * PNC_N_ROUNDS;
+
+	param int CV_VERIFY_FULL_SIZE = CV_ROUND_SIZE * PNC_N_OPENED_ROUNDS;
+
+
+
+/***************************/
+/*    PROOFS PARAMETERS    */
+/***************************/
+
+
+	param int PROOF_SEED_INFO_SIZE    = (TREE_DEPTH_2 - 1) * PNC_SEED_SIZE;
+	param int PROOF_AUX_SIZE          = PNC_VIEW_SIZE;
+	param int PROOF_INPUT_SIZE        = PNC_INPUT_SIZE;
+	param int PROOF_MSGS_SIZE         = PNC_VIEW_SIZE;
+	param int PROOF_C_SIZE            = PNC_DIGEST_SIZE;
+
+	param int PROOF_SEED_INFO_IDX     = 0;
+	param int PROOF_AUX_IDX           = PROOF_SEED_INFO_IDX + PROOF_SEED_INFO_SIZE;
+	param int PROOF_INPUT_IDX         = PROOF_AUX_IDX + PROOF_AUX_SIZE;
+	param int PROOF_MSGS_IDX          = PROOF_INPUT_IDX + PROOF_INPUT_SIZE;
+	param int PROOF_C_IDX             = PROOF_MSGS_IDX + PROOF_MSGS_SIZE;
+
+	param int PROOF_FULL_SIZE         = PROOF_C_IDX + PROOF_C_SIZE;
+	param int PROOFS_FULL_SIZE        = PROOF_FULL_SIZE * PNC_N_OPENED_ROUNDS;
+
+
+
+	param int PROOF_U64_SEED_INFO_SIZE    = (TREE_DEPTH_2 - 1) * PNC_U64_SEED_SIZE;
+	param int PROOF_U64_AUX_SIZE          = PNC_U64_VIEW_SIZE;
+	param int PROOF_U64_INPUT_SIZE        = PNC_U64_INPUT_SIZE;
+	param int PROOF_U64_MSGS_SIZE         = PNC_U64_VIEW_SIZE;
+	param int PROOF_U64_C_SIZE            = PNC_U64_DIGEST_SIZE;
+
+	param int PROOF_U64_SEED_INFO_IDX     = 0;
+	param int PROOF_U64_AUX_IDX           = PROOF_U64_SEED_INFO_IDX + PROOF_U64_SEED_INFO_SIZE;
+	param int PROOF_U64_INPUT_IDX         = PROOF_U64_AUX_IDX + PROOF_U64_AUX_SIZE;
+	param int PROOF_U64_MSGS_IDX          = PROOF_U64_INPUT_IDX + PROOF_U64_INPUT_SIZE;
+	param int PROOF_U64_C_IDX             = PROOF_U64_MSGS_IDX + PROOF_U64_MSGS_SIZE;
+
+	param int PROOF_U64_FULL_SIZE         = PROOF_U64_C_IDX + PROOF_U64_C_SIZE;
+	param int PROOFS_U64_FULL_SIZE        = PROOF_U64_FULL_SIZE * PNC_N_OPENED_ROUNDS;
+
+
+/***************************/
+/*   SIGNATURE PARAMETERS  */
+/***************************/
+
+
+	/* PARAMETERS U8 */
+
+		param int CHUNKS_SIZE = 96;
+
+		param int SIG_CHALLENGE_SIZE       = PNC_DIGEST_SIZE;
+		param int SIG_SALT_SIZE            = PNC_SALT_SIZE;
+		param int SIG_I_SEED_INFO_SIZE     = PNC_N_ROUNDS * PNC_SEED_SIZE; //varies
+		param int SIG_CV_INFO_SIZE         = CV_INFO_SIZE;				   //varies
+		param int SIG_PROOFS_SIZE      	   = PNC_N_OPENED_ROUNDS * PROOF_FULL_SIZE;
+		param int SIG_CHALLENGE_C_SIZE     = PNC_N_OPENED_ROUNDS * U16;
+		param int SIG_CHALLENGE_P_SIZE     = PNC_N_OPENED_ROUNDS * U16;
+
+		param int SIG_CHALLENGE_IDX		  = 0;
+		param int SIG_SALT_IDX 			  = SIG_CHALLENGE_IDX + SIG_CHALLENGE_SIZE;
+		param int SIG_INFO_IDX 			  = SIG_SALT_IDX + SIG_SALT_SIZE;
+		
+
+		param int SIG_FULL_SIZE       	  = SIG_INFO_IDX 
+										  + SIG_I_SEED_INFO_SIZE
+										  + SIG_CV_INFO_SIZE
+										  + SIG_PROOFS_SIZE;
+
+
+	/* PARAMETERS U16 */
+/*
+		param int SIG_SALT_U16_SIZE            = SIG_SALT_SIZE >> 1;
+		param int SIG_I_SEED_INFO_U16_SIZE     = SIG_I_SEED_INFO_SIZE >> 1;
+		param int SIG_I_SEED_INFO_LEN_U16_SIZE = SIG_I_SEED_INFO_LEN_SIZE >> 1;
+		param int SIG_CV_INFO_U16_SIZE         = SIG_CV_INFO_SIZE >> 1;
+		param int SIG_CHALLENGE_U16_SIZE       = SIG_CHALLENGE_SIZE >> 1;
+		param int SIG_CHALLENGE_P_U16_SIZE     = SIG_CHALLENGE_P_SIZE >> 1;
+		param int SIG_PROOFS_U16_SIZE          = SIG_PROOFS_SIZE >> 1;
+
+
+		param int SIG_H_U16_IDX     		  = SIG_H_IDX >> 1;
+		param int SIG_CHALLENGE_C_U16_IDX	  = SIG_CHALLENGE_C_IDX >> 1;
+		param int SIG_CHALLENGE_P_U16_IDX 	  = SIG_CHALLENGE_P_IDX >> 1;
+		param int SIG_I_SEED_INFO_LEN_U16_IDX = SIG_I_SEED_INFO_LEN_IDX >> 1;
+
+*/
+		param int SIG_CHALLENGE_C_U16_SIZE = SIG_CHALLENGE_C_SIZE >> 1;
+		param int SIG_FULL_U16_SIZE = SIG_FULL_SIZE >> 1;
+
+
+	/* PARAMETERS U64 */
+
+		param int SIG_U64_CHALLENGE_SIZE  = SIG_CHALLENGE_SIZE >> 3;
+/*
+		param int SIG_H_U64_IDX           = SIG_H_IDX >> 3;
+		param int SIG_CHALLENGE_C_U64_IDX = SIG_CHALLENGE_C_IDX >> 3;
+		param int SIG_CHALLENGE_P_U64_IDX = SIG_CHALLENGE_P_IDX >> 3;
+*/
+		param int SIG_U64_FULL_SIZE = SIG_FULL_SIZE >> 3;
+
+
+
+	
+/******************************/
+/* SEMI SIGNATURE PARAMETERS  */
+/******************************/
+
+
+	/* PARAMETERS U8 */
+/*
+		param int SEMI_SIG_SALT_SIZE            = SIG_SALT_SIZE;
+		param int SEMI_SIG_I_SEED_INFO_LEN_SIZE = SIG_I_SEED_INFO_LEN_SIZE;
+		param int SEMI_SIG_CV_INFO_LEN_SIZE 	= SIG_CV_INFO_LEN_SIZE;
+		param int SEMI_SIG_CHALLENGE_SIZE       = SIG_CHALLENGE_SIZE;
+		param int SEMI_SIG_CHALLENGE_C_SIZE     = SIG_CHALLENGE_C_SIZE;
+		param int SEMI_SIG_CHALLENGE_P_SIZE 	= SIG_CHALLENGE_P_SIZE;
+		param int SEMI_SIG_I_SEED_INFO_SIZE     = SIG_I_SEED_INFO_SIZE;
+		param int SEMI_SIG_CV_INFO_SIZE         = SIG_CV_INFO_SIZE;
+		
+
+		param int SEMI_SIG_SALT_IDX		 	   = SIG_SALT_IDX;
+		param int SEMI_SIG_I_SEED_INFO_LEN_IDX = SIG_I_SEED_INFO_LEN_IDX;
+		param int SEMI_SIG_CV_INFO_LEN_IDX 	   = SIG_CV_INFO_LEN_IDX;
+		param int SEMI_SIG_H_IDX     		   = SIG_H_IDX;
+		param int SEMI_SIG_CHALLENGE_C_IDX 	   = SIG_CHALLENGE_C_IDX;
+		param int SEMI_SIG_CHALLENGE_P_IDX     = SIG_CHALLENGE_P_IDX;
+		param int SEMI_SIG_I_SEED_INFO_IDX 	   = SIG_I_SEED_INFO_IDX;
+		param int SEMI_SIG_CV_INFO_IDX 		   = SIG_CV_INFO_IDX;
+*/		
+
+		param int SEMI_SIG_FULL_SIZE           = SIG_FULL_SIZE;
+
+
+
+	/* PARAMETERS U16 */
+/*
+		param int SEMI_SIG_SALT_U16_SIZE            = SEMI_SIG_SALT_SIZE >> 1;
+		param int SEMI_SIG_I_SEED_INFO_U16_SIZE     = SEMI_SIG_I_SEED_INFO_SIZE >> 1;
+		param int SEMI_SIG_I_SEED_INFO_LEN_U16_SIZE = SEMI_SIG_I_SEED_INFO_LEN_SIZE >> 1;
+		param int SEMI_SIG_CV_INFO_U16_SIZE         = SEMI_SIG_CV_INFO_SIZE >> 1;
+		param int SEMI_SIG_CHALLENGE_U16_SIZE       = SEMI_SIG_CHALLENGE_SIZE >> 1;
+		param int SEMI_SIG_CHALLENGE_C_U16_SIZE     = SEMI_SIG_CHALLENGE_C_SIZE >> 1;
+		param int SEMI_SIG_CHALLENGE_P_U16_SIZE     = SEMI_SIG_CHALLENGE_P_SIZE >> 1;
+
+
+		param int SEMI_SIG_H_U16_IDX     		   = SEMI_SIG_H_IDX >> 1;
+		param int SEMI_SIG_CHALLENGE_C_U16_IDX	   = SEMI_SIG_CHALLENGE_C_IDX >> 1;
+		param int SEMI_SIG_CHALLENGE_P_U16_IDX 	   = SEMI_SIG_CHALLENGE_P_IDX >> 1;
+		param int SEMI_SIG_I_SEED_INFO_LEN_U16_IDX = SEMI_SIG_I_SEED_INFO_LEN_IDX >> 1;
+
+		param int SEMI_SIG_FULL_U16_SIZE = SEMI_SIG_FULL_SIZE >> 1;
+*/
+
+	/* PARAMETERS U64 */
+/*
+		param int SEMI_SIG_H_U64_IDX           = SEMI_SIG_H_IDX >> 3;
+		param int SEMI_SIG_CHALLENGE_C_U64_IDX = SEMI_SIG_CHALLENGE_C_IDX >> 3;
+		param int SEMI_SIG_CHALLENGE_P_U64_IDX = SEMI_SIG_CHALLENGE_P_IDX >> 3;
+*/
+		param int SEMI_SIG_U64_FULL_SIZE = SEMI_SIG_FULL_SIZE >> 3;
+

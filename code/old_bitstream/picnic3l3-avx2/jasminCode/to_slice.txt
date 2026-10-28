@@ -1,0 +1,28 @@
+Glossary:
+	fun name (xN): within the function an array slice would be nice in N places
+	fun name (inp1, inp2,...) => fun name: Slicing its inputs inp1, inp2,... transforms this function into another
+
+
+
+picnic3_aux:
+	__createRandomTapes2 (tapes,seeds) => __createRandomTapes
+
+keccak_avx2:
+
+	_hashSeed_1
+	_hashSeed_22
+
+kecak_x4_avx2:
+
+	__hashSeed_x4_1
+	__hashSeed_x4_22
+	__hashTapes2_x4_v2 (x2)
+
+
+
+
+
+
+EXTRA NOTES:
+
+CRUNCH SAME FULL ABSORB ON __hashTapes2_x4 & __commit2_x4

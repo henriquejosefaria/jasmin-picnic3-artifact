@@ -1,0 +1,311 @@
+require "copy.jinc"
+require "params.jinc"
+require "picnic3_aux.jinc"
+require "picnic3_tree_aux.jinc"
+
+/*
+ * Recompute a binary tree's number of given leaves.
+ */
+#[returnaddress="stack"]
+fn revealSeedsSize_1(
+	reg ptr u8[TREE_NUM_NODES_1] tree_exists,
+	reg ptr u8[SIG_CHALLENGE_C_SIZE] hideList,
+	reg ptr u64[REVEALED_SIZE] revealed
+) -> reg ptr u64[REVEALED_SIZE], reg u64
+{
+	reg u64 revealedSize;
+
+	revealed, revealedSize = _getRevealedNodes(revealed, tree_exists, hideList);
+
+	return revealed, revealedSize;
+}
+
+#[returnaddress="stack"]
+fn _reconstructSeeds_1(
+	reg ptr u8[TREE_NODES_1_SIZE] tree,
+	reg ptr u8[TREE_NUM_NODES_1] tree_have,
+	reg ptr u8[TREE_NUM_NODES_1] tree_exists,
+	reg ptr u64[REVEALED_SIZE] revealed,
+	reg u64 revealedSize,
+	reg 	u64 sig,
+	reg ptr u8[PNC_SALT_SIZE] salt
+) -> reg ptr u8[TREE_NODES_1_SIZE], reg ptr u8[TREE_NUM_NODES_1], reg ptr u8[TREE_NUM_NODES_1], reg u64
+{
+	reg u64 i out_pos;
+	reg u16 repIndex;
+
+	() = #spill(salt);
+
+	i = 0;
+	while(i < revealedSize)
+	{
+		out_pos = revealed[i];
+		out_pos *= PNC_SEED_SIZE;
+
+		tree, sig = __copy_seed_from_sig(tree, sig, out_pos);
+
+		out_pos = revealed[i];
+		tree_have[out_pos] = 1;
+
+		i += 1;
+	}
+	() = #spill(sig);
+	() = #unspill(salt);
+
+	repIndex = 0;
+	tree, tree_have, tree_exists = 
+		_expandSeeds_1(tree, tree_have, tree_exists, salt, repIndex);
+
+	() = #unspill(sig);
+	return tree, tree_have, tree_exists, sig;
+}
+
+/*
+ * Recompute a binary tree's leaves from some of the tree's intermediate values.
+ * Note: Some leaves won't be computed.
+ */
+inline
+fn __reconstructSeeds_2(
+	stack u8[TREE_NODES_2_SIZE] tree,
+	stack u8[TREE_NUM_NODES_2] tree_have,
+	stack u8[TREE_NUM_NODES_2] tree_exists,
+	stack u8[PROOFS_FULL_SIZE] proofs,
+	stack u8[PNC_SALT_SIZE] salt,
+	reg   u64 proofs_idx,
+	reg   u16 P_index_u16,
+	reg   u16 repIndex
+) -> stack u8[TREE_NODES_2_SIZE], stack u8[TREE_NUM_NODES_2], stack u8[TREE_NUM_NODES_2]
+{
+	reg u64 i revealedSize out_pos;
+
+	stack u16 s_repIndex;
+	stack u64 s_i;
+
+	stack u64[REVEALED_SIZE_2] revealed;
+
+	reg ptr u8[TREE_NUM_NODES_2] reg_tree_exists;
+
+	s_repIndex = repIndex;
+	reg_tree_exists = tree_exists;
+	revealed, revealedSize = _getRevealedNodes_2(revealed, reg_tree_exists, P_index_u16);
+
+	i = 0;
+	while(i < revealedSize)
+	{
+
+		out_pos = revealed[i];
+		out_pos *= PNC_SEED_SIZE;
+
+		s_i = i;
+
+		tree, proofs_idx = __copy_seed_from_proofs(tree, proofs, out_pos, proofs_idx);
+
+		i = s_i;
+
+		out_pos = revealed[i];
+		tree_have[out_pos] = 1;
+
+		i += 1;
+	}
+
+	repIndex = s_repIndex;
+	tree, tree_have, tree_exists
+		= __expandSeeds_2(tree, tree_have, tree_exists, salt, repIndex);
+
+	return tree, tree_have, tree_exists;
+}
+
+/*
+ * Expands a binary tree from a root node untill is has at least
+ * as many leaves as players per online round
+ */
+#[returnaddress="stack"]
+fn _generateSeeds(
+	reg ptr u8[TREE_NODES_2_SIZE] tree,
+	reg ptr u8[TREE_NUM_NODES_2] tree_have,
+	reg ptr u8[TREE_NUM_NODES_2] tree_exists,
+	reg ptr u8[TREE_NODES_1_SIZE] iSeedsTree,
+	reg ptr u8[PNC_SALT_SIZE] salt,
+	reg 	u16 round_u16,
+	reg 	u64 round
+) -> reg ptr u8[TREE_NODES_2_SIZE], reg ptr u8[TREE_NUM_NODES_2], reg ptr u8[TREE_NUM_NODES_2]
+{
+	reg u64 in_idx out_idx;
+
+	tree, tree_have, tree_exists = _createTree_2(tree, tree_have, tree_exists);
+
+	in_idx = round;
+	in_idx += GET_LEAVES_1;
+	in_idx *= TREE_DATA_SIZE;
+
+	out_idx = 0;
+	
+	tree = __copy_seed_from_iSeed(tree, iSeedsTree, out_idx, in_idx);
+
+	tree_have[0] = 1;
+
+	tree, tree_have, tree_exists = _expandSeeds_2(tree, tree_have, tree_exists, salt, round_u16);
+
+	return tree, tree_have, tree_exists;
+}
+
+#[returnaddress="stack"]
+fn _openMerkleTree_verify(
+	reg ptr u8[TREE_NODES_3_SIZE] treeCv,
+	reg ptr u8[TREE_NUM_NODES_3] treeCv_have,
+	reg ptr u64[REVEALED_SIZE] revealed,
+	reg u64 revealedSize,
+	reg 	u64 sig
+) -> reg ptr u8[TREE_NODES_3_SIZE], reg ptr u8[TREE_NUM_NODES_3], reg u64
+{
+
+	reg u64 i pos t64;
+
+	i = 0;
+	while(i < TREE_NODES_3_SIZE)
+	{	
+		treeCv.[:u64 i] = 0;
+		i += 8;
+	}
+
+	/* Deserialize input */
+	i=0;
+	pos = 0;
+	while( i < revealedSize)
+	{
+		t64 = revealed[i];
+		treeCv_have[t64] = 1;
+
+		t64 *= PNC_DIGEST_SIZE;
+		treeCv, sig = __copy_digest_to_tree(treeCv, sig, t64);
+
+		i += 1;
+	}
+
+	return treeCv, treeCv_have, sig;
+}
+
+/* 
+ * Computes a Merkle tree root node using the existing leaves and intermediate nodes
+ */
+inline
+fn _verifyMerkleTree(
+	stack u8[TREE_NODES_3_SIZE] treeCv,
+	stack u8[TREE_NUM_NODES_3] treeCv_have,
+	stack u8[TREE_NUM_NODES_3] treeCv_exists,
+	stack u8[CV_FULL_SIZE] leafData,
+	stack u8[CHALLENGE_C_SIZE] challengeC,
+	stack u8[PNC_SALT_SIZE] salt
+) -> reg u64, stack u8[TREE_NODES_3_SIZE], stack u8[TREE_NUM_NODES_3], stack u8[TREE_NUM_NODES_3]
+{
+	reg u8 t8;
+	reg u16 i_u16;
+	reg u64 i in_pos out_pos result;
+
+	stack u64 s_result s_i;
+
+	reg ptr u8[CHALLENGE_C_SIZE] reg_challengeC;
+	reg ptr u8[TREE_NODES_3_SIZE] reg_treeCv;
+	reg ptr u8[CV_FULL_SIZE] reg_leafData;
+
+	s_result = 0;
+
+	/* Copy the leaf data, where we have it. The actual data being committed to has already been hashed, according to the spec. */
+
+	i_u16 = 0;
+	while(i_u16 < TREE_NUM_LEAVES_3)
+	{
+		reg_challengeC = challengeC;
+		t8 = __contains_challengeC_2(reg_challengeC, i_u16);
+
+		if(t8 == 1)
+		{
+			i = (64u) i_u16;
+			t8 = treeCv_have[GET_LEAVES_3 + i];
+
+			if(t8 == 1)
+			{
+				s_result = 1; /* A leaf was assigned from the prover for a node we've recomputed */
+			}
+
+			in_pos = (64u)i;
+			in_pos *= CV_ROUND_SIZE;
+
+			out_pos = GET_LEAVES_3;
+			out_pos += (64u)i;
+			
+			treeCv_have[out_pos] = 1;
+
+			out_pos *= CV_ROUND_SIZE;
+
+			reg_treeCv = treeCv;	
+			reg_leafData = leafData;
+			reg_treeCv = __copy_leaf_to_tree(reg_treeCv, reg_leafData, out_pos, in_pos);
+			treeCv = reg_treeCv;
+		}
+
+		i_u16 += 1;
+	}
+
+	/* At this point the tree has some of the leaves, and some
+		intermediate nodes.
+	   Work up the tree, computing all nodes we don't have that are missing. */
+
+	i = TREE_NUM_NODES_3;
+	while(i > 0)
+	{
+		s_i = i;
+
+		treeCv, treeCv_have, treeCv_exists = __computeParentHash(treeCv, treeCv_have, treeCv_exists, i, salt);
+
+		i = s_i;
+		i -= 1;
+	}
+	
+	/* Fail if the root was not computed. */
+	t8 = treeCv_have[0];
+	if(t8 == 0)
+	{
+		result = 2;
+	}
+	else
+	{
+		result = s_result;
+	}
+
+
+	return result, treeCv, treeCv_have, treeCv_exists;	
+}
+
+/*
+ * Uses a challenge to compute the positions of the missing leaves of a tree.
+ */
+inline
+fn getMissingLeavesList(
+    stack u16[MISSING_LEAVES_SIZE] missingLeaves
+  , stack u8[CHALLENGE_C_SIZE] challengeC
+) -> stack u16[MISSING_LEAVES_SIZE]
+{
+  reg u8 t8;
+  reg u16 i;
+  reg u64 pos;
+
+  reg ptr u8[CHALLENGE_C_SIZE] reg_challengeC;
+
+  pos = 0;
+  i = 0;
+  while(i < PNC_N_ROUNDS)
+  {
+  	reg_challengeC = challengeC;
+    t8 = __contains_challengeC_2(reg_challengeC, i);
+    if(t8 == 0)
+    {
+      missingLeaves[pos] = i;
+      pos += 1;
+    }
+    i += 1;
+  }
+
+  return missingLeaves;
+}
+

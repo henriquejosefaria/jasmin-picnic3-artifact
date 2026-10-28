@@ -1,0 +1,439 @@
+require "keccak_avx2.jinc"
+
+inline fn __computeSaltAndRootSeed(
+  #[secret]          stack u8[PNC_SALT_AND_ROOT_LENGTH] saltAndRoot,
+  #[poly=privateKey] stack u8[MZD_SIZE] privateKey,
+  #[poly=publickey]  stack u8[MZD_SIZE] publicKey,
+  #[poly=plaintext]  stack u8[MZD_SIZE] plaintext,
+  #[poly=message]    stack u8[PNC_MESSAGE_BYTE_LENGTH] message
+) -> stack u8[PNC_SALT_AND_ROOT_LENGTH]
+{
+  reg ptr u8[PNC_SALT_AND_ROOT_LENGTH] a;
+  reg ptr u8[MZD_SIZE] b;
+  reg ptr u8[MZD_SIZE] c;
+  reg ptr u8[MZD_SIZE] d;
+  reg ptr u8[PNC_MESSAGE_BYTE_LENGTH] e;
+
+  a = saltAndRoot;
+  b = privateKey;
+  c = publicKey;
+  d = plaintext;
+  e = message;
+
+  a = _computeSaltAndRootSeed(a,b,c,d,e);
+  saltAndRoot = a;
+
+  return saltAndRoot;
+}
+
+inline fn __hashSeed_1(
+  #[secret]         stack u8[4 * 2 * MAX_SEED_SIZE_BYTES] digest,
+  #[poly=inputSeed] reg ptr u8[TREE_NODES_1_SIZE] tree,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt,
+  #[poly=repIndex]  reg u16 repIndex, 
+  #[public]         reg u16 nodeIndex,
+  #[public]         reg u64 idx
+) -> #[secret] stack u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+  reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] a;
+  reg ptr u8[PNC_SEED_SIZE] b;
+  
+  idx *= PNC_SEED_SIZE;
+  b = tree[idx: PNC_SEED_SIZE];
+
+  a = digest;
+  a = _hashSeed(a, b, salt, repIndex, nodeIndex);
+  digest = a;
+
+  return digest;
+}
+
+
+inline fn __hashSeed_2(
+  #[secret]         stack u8[4 * 2 * MAX_SEED_SIZE_BYTES] digest,
+  #[poly=inputSeed] reg ptr u8[TREE_NODES_2_SIZE] tree,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt,
+  #[poly=repIndex]  reg u16 repIndex, 
+  #[public]         reg u16 nodeIndex,
+  #[public]         reg u64 idx
+) -> #[secret] stack u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+  reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] a;
+  reg ptr u8[PNC_SEED_SIZE] b;
+  
+  idx *= PNC_SEED_SIZE;
+  b = tree[idx: PNC_SEED_SIZE];
+
+  a = digest;
+  a = _hashSeed(a, b, salt, repIndex, nodeIndex);
+  digest = a;
+
+  return digest;
+}
+
+inline
+fn __commit(
+  #[secret] stack u8[COMMITMENTS_FULL_SIZE] commitments,
+  #[secret] stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  #[secret] stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes, 
+  #[secret] stack u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 round,
+  #[public] reg u16 player
+) -> stack u8[COMMITMENTS_FULL_SIZE]
+{
+  reg u64 idx0 idx1;
+
+  reg ptr u8[COMMITMENT_SIZE] a;
+  reg ptr u8[TREE_DATA_SIZE] b;
+  reg ptr u8[TAPE_AUX_SIZE] c; 
+  reg ptr u8[PNC_SALT_SIZE] d;
+
+  idx0 = round;
+  idx0 *= TREE_NODES_2_SIZE;
+  idx1 = (64u) player;
+  idx0 += GET_LEAVES_2 * TREE_DATA_SIZE;
+  idx1 *= PNC_INPUT_SIZE;
+  idx0 += idx1;
+  b = seeds[idx0: TREE_DATA_SIZE];
+
+  idx1 = round;
+  idx1 *= COMMITMENTS_SIZE;
+  idx0 = (64u) player;
+  idx0 *= COMMITMENT_SIZE;
+  idx1 += idx0;
+  a = commitments[idx1: COMMITMENT_SIZE]; 
+
+  idx0 = round;
+  idx0 *= TAPES_FULL_SIZE;
+  idx0 += TAPE_AUX_IDX;
+  c = tapes[idx0: TAPE_AUX_SIZE];
+
+  d = salt;
+  a = _commit(a, b, c, d, round, player);
+  commitments[idx1: COMMITMENT_SIZE] = a;
+
+  return commitments;
+}
+
+inline
+fn __commit_assemble(
+  #[public] reg u64 out,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes, 
+  #[secret] reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 round,
+  #[public] reg u16 player
+) -> reg u64
+{
+  reg u64 idx0 idx1;
+
+  reg ptr u8[TREE_DATA_SIZE] a;
+  reg ptr u8[TAPE_AUX_SIZE] b; 
+  reg ptr u8[PNC_SALT_SIZE] c;
+
+  idx0 = round;
+  idx0 *= TREE_NODES_2_SIZE;
+  idx1 = (64u) player;
+  idx0 += GET_LEAVES_2 * TREE_DATA_SIZE;
+  idx1 *= TREE_DATA_SIZE;
+  idx0 += idx1;
+  a = seeds[idx0: TREE_DATA_SIZE];
+
+  idx0 = round;
+  idx0 *= TAPES_FULL_SIZE;
+  idx0 += TAPE_AUX_IDX;
+  b = tapes[idx0: TAPE_AUX_SIZE];
+
+  c = salt;
+
+  out = _commit_assemble(out, a, b, c, round, player);
+  
+  return out;
+}
+
+inline
+fn __commit_verify(
+  #[secret] stack u8[COMMITMENTS_FULL_SIZE] commitments,
+  #[secret] stack u8[TREE_NODES_2_SIZE] seeds,
+  #[secret] reg ptr u8[TAPES_FULL_SIZE] tapes, 
+  #[secret] stack u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 round,
+  #[public] reg u16 player
+) -> stack u8[COMMITMENTS_FULL_SIZE]
+{
+  reg u64 idx0 idx1;
+
+  reg ptr u8[COMMITMENT_SIZE] a;
+  reg ptr u8[TREE_DATA_SIZE] b;
+  reg ptr u8[TAPE_AUX_SIZE] c; 
+  reg ptr u8[PNC_SALT_SIZE] d;
+
+  idx1 = (64u) player;
+  idx0 = GET_LEAVES_2 * PNC_INPUT_SIZE;
+  idx1 *= PNC_INPUT_SIZE;
+  idx0 += idx1;
+  b = seeds[idx0: TREE_DATA_SIZE];
+
+  idx1 = round;
+  idx1 *= COMMITMENTS_SIZE;
+  idx0 = (64u) player;
+  idx0 *= COMMITMENT_SIZE;
+  idx1 += idx0;
+  a = commitments[idx1: COMMITMENT_SIZE]; 
+
+  idx0 = TAPE_AUX_IDX;
+  c = tapes[idx0: TAPE_AUX_SIZE];
+
+  d = salt;
+  a = _commit(a, b, c, d, round, player);
+  commitments[idx1: COMMITMENT_SIZE] = a;
+
+  return commitments;
+}
+
+inline
+fn __commit_verify_v2(
+  #[secret] stack u8[COMMITMENTS_FULL_SIZE] commitments,
+  #[secret] stack u8[TREE_NODES_2_SIZE] seeds,
+  #[secret] stack u8[PROOFS_FULL_SIZE] proofs, 
+  #[secret] stack u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 round proof_round,
+  #[public] reg u16 player
+) -> stack u8[COMMITMENTS_FULL_SIZE]
+{
+  reg u64 idx0 idx1;
+
+  reg ptr u8[COMMITMENT_SIZE] a;
+  reg ptr u8[TREE_DATA_SIZE] b;
+  reg ptr u8[TAPE_AUX_SIZE] c; 
+  reg ptr u8[PNC_SALT_SIZE] d;
+
+  idx1 = (64u) player;
+  idx1 += GET_LEAVES_2;
+  idx1 *= TREE_DATA_SIZE;
+  b = seeds[idx1: TREE_DATA_SIZE];
+
+  idx1 = round;
+  idx1 *= COMMITMENTS_SIZE;
+  idx0 = (64u) player;
+  idx0 *= COMMITMENT_SIZE;
+  idx1 += idx0;
+  a = commitments[idx1: COMMITMENT_SIZE]; 
+
+  proof_round *= PROOF_FULL_SIZE;
+  proof_round += PROOF_AUX_IDX;
+  c = proofs[proof_round: TAPE_AUX_SIZE];
+
+  d = salt;
+  a = _commit(a, b, c, d, round, player);
+  commitments[idx1: COMMITMENT_SIZE] = a;
+
+  return commitments;
+}
+
+inline
+fn __commit_h(
+  #[secret] stack u8[CH_FULL_SIZE] out,
+  #[secret] stack u8[COMMITMENTS_FULL_SIZE] in,
+  #[public]           reg u64 round
+) -> stack u8[CH_FULL_SIZE]
+{
+  reg u64 idx0;
+  reg ptr u8[CH_ROUND_SIZE] a;
+  reg ptr u8[COMMITMENTS_SIZE] b;
+  
+  idx0 = round;
+  idx0 *= CH_ROUND_SIZE;
+  round *= COMMITMENTS_SIZE;
+  
+  a = out[idx0:CH_ROUND_SIZE];
+  b = in[round:COMMITMENTS_SIZE];
+
+  a = _commit_h(a,b);
+  out[idx0:CH_ROUND_SIZE] = a;
+
+  return out;
+}
+
+inline
+fn __commit_v(
+  #[secret] stack u8[CV_FULL_SIZE] out,
+  #[secret] stack u8[PNC_N_ROUNDS * MZD_SIZE] in1,
+  #[secret] stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] in2,
+  #[public]           reg u64 round
+) -> stack u8[CV_FULL_SIZE]
+{
+  reg u64 idx0 idx1;
+  reg ptr u8[MZD_SIZE] a;
+  reg ptr u8[MSGS_FULL_SIZE] b;
+  reg ptr u8[CV_ROUND_SIZE] c;
+
+  idx0 = round;
+  idx0 *= MZD_SIZE;
+  a = in1[idx0: MZD_SIZE];
+
+  idx1 = round;
+  idx1 *= MSGS_FULL_SIZE;
+  b = in2[idx1: MSGS_FULL_SIZE];
+
+  round *= CV_ROUND_SIZE;
+  c = out[round: CV_ROUND_SIZE];
+
+  c = _commit_v(c,a,b);
+
+  out[round: CV_ROUND_SIZE] = c;
+
+  return out;
+}
+
+inline 
+fn __commit_v_verify(
+  stack u8[CV_FULL_SIZE] output,
+  stack u8[SIG_PROOFS_SIZE] input,
+  stack u8[MSGS_FULL_SIZE] msgs,
+  reg u64 output_idx input_idx
+) -> stack u8[CV_FULL_SIZE]
+{
+  reg ptr u8[CV_ROUND_SIZE] a;
+  reg ptr u8[MZD_SIZE] b;
+  reg ptr u8[MSGS_FULL_SIZE] c;
+
+  output_idx *= CV_ROUND_SIZE;
+  a = output[output_idx: CV_ROUND_SIZE];
+
+  input_idx *= PROOF_FULL_SIZE;
+  input_idx += PROOF_INPUT_IDX;
+  b = input[input_idx: MZD_SIZE];
+
+  c = msgs;
+  a = _commit_v(a, b, c);
+  output[output_idx: CV_ROUND_SIZE] = a;
+
+  return output;
+}
+
+/*
+inline
+fn __computeParentHash(
+  #[secret] reg ptr u8[TREE_NODES_3_SIZE] tree,
+  #[public] reg ptr u8[TREE_NUM_NODES_3] tree_have,
+  #[public] reg ptr u8[TREE_NUM_NODES_3] tree_exists,
+  #[secret] reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 parent,
+  #[public] reg u16 parent_u16
+) -> reg ptr u8[TREE_NODES_3_SIZE], reg ptr u8[TREE_NUM_NODES_3], reg ptr u8[TREE_NUM_NODES_3]
+{
+  reg u8 t8 aux;
+  reg u64 t child_idx; 
+  reg ptr u8[PNC_DIGEST_SIZE] a;
+  reg ptr u8[2*PNC_DIGEST_SIZE] b;
+
+
+  tree_have[parent] = 1;
+
+  child_idx = parent;
+  child_idx <<= 1;
+  child_idx += 1;
+  child_idx *= PNC_DIGEST_SIZE;
+  b = tree[child_idx: 2*PNC_DIGEST_SIZE];
+
+  t8 = tree_exists[parent];
+
+  parent *= PNC_DIGEST_SIZE;
+  a = tree[parent:PNC_DIGEST_SIZE];
+
+  () = #spill(tree);
+  () = #spill(parent);
+  () = #spill(tree_have);
+  () = #spill(tree_exists);
+
+  aux = child_idx - TREE_NUM_NODES_3;
+  t8 &= aux;
+
+  a = _computeParentHash(a, b, salt, t8, parent_u16);
+
+  () = #unspill(tree);
+  () = #unspill(parent);
+  tree[parent:PNC_DIGEST_SIZE] = a;
+
+  () = #unspill(tree_have);
+  () = #unspill(tree_exists);
+
+  return tree, tree_have, tree_exists;
+}
+*/
+
+inline
+fn __HCP(
+  #[public]          reg u64 signature,
+  #[poly=chalenge_h] stack u8[CH_FULL_SIZE] challenge_h,
+  #[poly=treeCv]     stack u8[TREE_NODES_3_SIZE] treeCv,
+  #[poly=salt]       stack u8[PNC_SALT_SIZE] salt,
+  #[poly=pubKey]     stack u8[MZD_SIZE] pubKey,
+  #[poly=plaintext]  stack u8[MZD_SIZE] plaintext,
+  #[poly=message]    stack u8[PNC_MESSAGE_BYTE_LENGTH] message,
+  #[public]          stack u8[SIG_CHALLENGE_C_SIZE] challengeC,
+  #[public]          stack u8[SIG_CHALLENGE_P_SIZE] challengeP
+) -> reg u64, stack u8[SIG_CHALLENGE_C_SIZE], stack u8[SIG_CHALLENGE_P_SIZE]
+{
+  reg ptr u8[CH_FULL_SIZE] a;
+  reg ptr u8[PNC_DIGEST_SIZE] b;
+  reg ptr u8[PNC_SALT_SIZE] c;
+  reg ptr u8[PNC_INPUT_SIZE] d e;
+  reg ptr u8[PNC_MESSAGE_BYTE_LENGTH] f;
+  reg ptr u8[SIG_CHALLENGE_C_SIZE] g;
+  reg ptr u8[SIG_CHALLENGE_P_SIZE] h;
+
+  a = challenge_h;
+  b = treeCv[0:PNC_DIGEST_SIZE];
+  c = salt;
+  d = pubKey;
+  e = plaintext;
+  f = message;
+  g = challengeC;
+  h = challengeP;
+  signature, g, h = _HCP(signature,a,b,c,d,e,f,g,h);
+  challengeC = g;
+  challengeP = h;
+  
+  return signature, challengeC, challengeP; 
+}
+
+inline
+fn __HCP_verify(
+  #[public]          stack u8[SIG_CHALLENGE_SIZE] challenge,
+  #[poly=chalenge_h] stack u8[CH_FULL_SIZE] challenge_h,
+  #[poly=treeCv]     stack u8[PNC_DIGEST_SIZE] treeCv,
+  #[poly=salt]       stack u8[PNC_SALT_SIZE] salt,
+  #[poly=pubKey]     stack u8[MZD_SIZE] pubKey,
+  #[poly=plaintext]  stack u8[MZD_SIZE] plaintext,
+  #[poly=message]    stack u8[PNC_MESSAGE_BYTE_LENGTH] message
+) -> stack u8[SIG_CHALLENGE_SIZE]
+{
+  reg ptr u8[SIG_CHALLENGE_SIZE] a;
+  reg ptr u8[CH_FULL_SIZE] b;
+  reg ptr u8[PNC_DIGEST_SIZE] c;
+  reg ptr u8[PNC_SALT_SIZE] d;
+  reg ptr u8[MZD_SIZE] e f;
+  reg ptr u8[PNC_MESSAGE_BYTE_LENGTH] g;
+
+  a = challenge;
+  b = challenge_h;
+  c = treeCv;
+  d = salt;
+  e = pubKey;
+  f = plaintext;
+  g = message;
+  a = _HCP_verify(a,b,c,d,e,f,g);
+  challenge = a;
+  
+  return challenge; 
+}
+
+
+
+
+
+
+
+

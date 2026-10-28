@@ -1,0 +1,195 @@
+require "picnic3_tree.jinc"
+require "picnic3_tree_verify.jinc"
+
+inline fn __buildTree2(
+	#[secret] stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+	#[public] stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] seeds_have,
+	#[public] stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] seeds_exists,
+	#[secret] stack u8[TREE_NODES_1_SIZE] iSeedsTree,
+	#[secret] 		  stack u8[PNC_SALT_SIZE] salt, 
+	#[public] 		  reg u64 round
+) -> stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE], stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2], stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2]
+{
+	reg u64 in_idx out_idx;
+	stack u64 s_round;
+
+	s_round = round;
+
+	out_idx = round;
+	out_idx *= TREE_NODES_2_SIZE;
+	in_idx = round;
+	in_idx += GET_LEAVES_1;
+	in_idx *= PNC_INPUT_SIZE;
+	seeds = __copy_input_seed2(seeds, iSeedsTree, out_idx, in_idx);
+
+	out_idx = s_round;
+	seeds, seeds_have, seeds_exists = __expandSeeds_22(seeds, seeds_have, seeds_exists, salt, out_idx);
+
+	return seeds, seeds_have, seeds_exists;
+}
+
+inline fn __openMerkleTree(
+	#[poly=tree] stack u8[TREE_NODES_3_SIZE] tree,
+	#[public]    stack u8[TREE_NUM_NODES_3] tree_exists,
+	#[public]    stack u16[MISSING_LEAVES_SIZE] missingLeaves,
+	#[public]    reg u64 sig
+) -> reg u64, reg u64
+{
+	reg u64 revealedSize;
+
+	reg ptr u8[TREE_NODES_3_SIZE] a;
+	reg ptr u8[TREE_NUM_NODES_3] b;
+	reg ptr u16[MISSING_LEAVES_SIZE] c;
+
+	a = tree;
+	b = tree_exists;
+	c = missingLeaves;
+	sig, revealedSize = _openMerkleTree(a,b,c,sig);
+
+	return sig, revealedSize;
+}
+
+inline fn __revealSeeds(
+	#[poly=tree] stack u8[TREE_NODES_1_SIZE] tree,
+	#[public]    stack u8[TREE_NUM_NODES_1] tree_exists,
+	#[public]    reg ptr u8[SIG_CHALLENGE_C_SIZE] challengeC,
+	#[public]    reg u64 signature
+) -> reg u64
+{
+	reg ptr u8[TREE_NODES_1_SIZE] a;
+	reg ptr u8[TREE_NUM_NODES_1] b;
+
+	a = tree;
+	b = tree_exists;
+	signature = _revealSeeds(a,b,challengeC,signature);
+
+	return signature;
+}
+
+inline fn __revealSeeds_2(
+	#[poly=tree] stack u8[TREE_NODES_2_SIZE] tree,
+	#[public]    stack u8[TREE_NUM_NODES_2] tree_exists,
+	#[public]    reg u64 sig,
+	#[public]    reg u16 hideList
+) -> reg u64
+{
+	
+	reg ptr u8[TREE_NODES_2_SIZE] a;
+	reg ptr u8[TREE_NUM_NODES_2] b;
+
+	a = tree;
+	b = tree_exists;
+	sig = _revealSeeds_2(a, b, sig, hideList);
+
+	return sig;
+}
+
+inline fn __reconstructSeeds_1(
+	stack u8[TREE_NODES_1_SIZE] tree,
+	stack u8[TREE_NUM_NODES_1] tree_have,
+	stack u8[TREE_NUM_NODES_1] tree_exists,
+	stack u64[REVEALED_SIZE] revealed,
+	reg   u64 revealedSize,
+	reg   u64 sig,
+	stack u8[PNC_SALT_SIZE] salt
+) -> stack u8[TREE_NODES_1_SIZE], stack u8[TREE_NUM_NODES_1], stack u8[TREE_NUM_NODES_1], reg u64
+{
+	reg ptr u8[TREE_NODES_1_SIZE] a;
+	reg ptr u8[TREE_NUM_NODES_1] b;
+	reg ptr u8[TREE_NUM_NODES_1] c;
+	reg ptr u64[REVEALED_SIZE] d;
+	reg ptr u8[PNC_SALT_SIZE] e;
+
+	a = tree;
+	b = tree_have;
+	c = tree_exists;
+	d = revealed;
+	e = salt;
+
+	a, b, c, sig = _reconstructSeeds_1(a,b,c,d,revealedSize,sig,e);
+
+	tree = a;
+	tree_have = b;
+	tree_exists = c;
+
+	return tree, tree_have, tree_exists, sig;
+}
+
+inline fn __generateSeeds(
+	stack u8[TREE_NODES_2_SIZE] tree,
+	stack u8[TREE_NUM_NODES_2] tree_have,
+	stack u8[TREE_NUM_NODES_2] tree_exists,
+	stack u8[TREE_NODES_1_SIZE] iSeedsTree,
+	stack u8[PNC_SALT_SIZE] salt,
+	reg 	u16 round_u16,
+	reg 	u64 round
+) -> stack u8[TREE_NODES_2_SIZE], stack u8[TREE_NUM_NODES_2], stack u8[TREE_NUM_NODES_2]
+{
+	
+	reg ptr u8[TREE_NODES_2_SIZE] a;
+	reg ptr u8[TREE_NUM_NODES_2] b c;
+	reg ptr u8[TREE_NODES_1_SIZE] d;
+	reg ptr u8[PNC_SALT_SIZE] e;
+
+	a = tree;
+	b = tree_have;
+	c = tree_exists;
+	d = iSeedsTree;
+	e = salt;
+
+	a,b,c = _generateSeeds(a,b,c,d,e,round_u16,round);
+	tree = a;
+	tree_have = b;
+	tree_exists = c;
+
+
+	return tree, tree_have, tree_exists;
+}
+
+inline
+fn __addMerkleNodes(
+	stack u8[TREE_NODES_3_SIZE] treeCv,
+	stack u8[TREE_NUM_NODES_3] treeCv_have,
+	stack u8[TREE_NUM_NODES_3] treeCv_exists,
+	stack u16[MISSING_LEAVES_SIZE] missingLeaves,
+	reg 	u64 sig
+) -> stack u8[TREE_NODES_3_SIZE], stack u8[TREE_NUM_NODES_3], stack u8[TREE_NUM_NODES_3], reg u64
+{
+	reg ptr u8[TREE_NODES_3_SIZE] a;
+	reg ptr u8[TREE_NUM_NODES_3] b c;
+	reg ptr u16[MISSING_LEAVES_SIZE] d;
+
+	a = treeCv;
+	b = treeCv_have;
+	c = treeCv_exists;
+	d = missingLeaves;
+	a, b, c, sig = _addMerkleNodes(a, b, c, d, sig);
+	treeCv = a;
+	treeCv_have = b;
+	treeCv_exists = c;
+
+	return treeCv, treeCv_have, treeCv_exists, sig;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

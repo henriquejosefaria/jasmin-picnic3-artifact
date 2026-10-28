@@ -1,0 +1,62 @@
+require "picnic3_simulate.jinc"
+
+
+inline fn __simulateOnline(
+  stack u8[MZD_SIZE] maskedKey,
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE] msgs,
+  stack u8[MZD_SIZE] plaintext,
+  reg u64 round unopened
+) -> stack u8[PNC_N_ROUNDS * MSGS_FULL_SIZE]
+{
+  reg u64 tapes_idx msgs_idx;
+
+  reg ptr u8[MZD_SIZE] a;
+  reg ptr u8[TAPES_FULL_SIZE] b;
+  reg ptr u8[MSGS_FULL_SIZE] c;
+  reg ptr u8[MZD_SIZE] d;
+
+  a = maskedKey;
+  d = plaintext;
+  unopened = unopened;
+
+  tapes_idx = round;
+  tapes_idx *= TAPES_FULL_SIZE;
+  b = tapes[tapes_idx: TAPES_FULL_SIZE];
+
+  msgs_idx = round;
+  msgs_idx *= MSGS_FULL_SIZE;
+  c = msgs[msgs_idx: MSGS_FULL_SIZE];
+
+  c = _simulateOnline(a, b, c, d, unopened);
+  msgs[msgs_idx: MSGS_FULL_SIZE] = c;
+
+  return msgs;
+}
+
+inline fn __simulateOnline_verify(
+  stack u8[MZD_SIZE] maskedKey,
+  stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes,
+  stack u8[MSGS_FULL_SIZE] msgs,
+  stack u8[MZD_SIZE] plaintext,
+  reg u64 round unopened
+) -> stack u8[MSGS_FULL_SIZE]
+{
+  reg ptr u8[MZD_SIZE] a;
+  reg ptr u8[TAPES_FULL_SIZE] b;
+  reg ptr u8[MSGS_FULL_SIZE] c;
+  reg ptr u8[MZD_SIZE] d;
+
+  a = maskedKey;
+  c = msgs;
+  d = plaintext;
+  unopened = unopened;
+
+  round *= TAPES_FULL_SIZE;
+
+  b = tapes[round: TAPES_FULL_SIZE];
+  c = _simulateOnline(a, b, c, d, unopened);
+  msgs = c;
+
+  return msgs;
+}

@@ -1,0 +1,143 @@
+require "keccak_x4_avx2.jinc"
+
+inline fn __hashSeed_x4_1(
+  #[secret]         stack u8[4 * 2 * MAX_SEED_SIZE_BYTES] out,
+  #[poly=inputSeed] reg ptr u8[TREE_NODES_1_SIZE] inputSeed,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public]         reg u64 inputSeed_idx,
+  #[poly=repIndex]  reg u16 repIndex,
+  #[poly=nodeIndex] reg u16 nodeIndex
+) -> stack u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+  reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] a;
+
+  a = out;
+  a = _hashSeed_x4_1(a, inputSeed, salt, inputSeed_idx, repIndex, nodeIndex);
+  out = a;
+
+  return out;
+}
+
+inline fn __hashSeed_x4_2(
+  #[secret]         stack u8[4 * 2 * MAX_SEED_SIZE_BYTES] digest,
+  #[poly=inputSeed] reg ptr u8[TREE_NODES_2_SIZE] inputSeed,
+  #[poly=salt]      reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public]         reg u64 inputSeed_idx,
+  #[poly=repIndex]  reg u16 repIndex,
+  #[poly=nodeIndex] reg u16 nodeIndex
+) -> stack u8[4 * 2 * MAX_SEED_SIZE_BYTES]
+{
+  reg ptr u8[4 * 2 * MAX_SEED_SIZE_BYTES] a;
+
+  a = digest;
+  a = _hashSeed_x4_2(a, inputSeed, salt, inputSeed_idx, repIndex,nodeIndex);
+  digest = a;
+
+  return digest;
+}
+
+inline fn __hashTapes_x4(
+  #[secret] reg ptr u8[TAPES_FULL_SIZE] out,
+  #[secret] reg ptr u8[TREE_NODES_2_SIZE] seeds,
+  #[secret] reg ptr u8[PNC_SALT_SIZE] salt,
+  #[public] reg u64 round,
+  #[public] reg u16 player,
+  #[public] reg u64 base_seeds base_out
+) -> reg ptr u8[TAPES_FULL_SIZE]
+{
+  out = _hashTapes_x4(out, seeds, salt, round, player, base_seeds, base_out);
+
+  return out;
+}
+
+inline fn sign_commit_x4(
+  #[secret] stack u8[COMMITMENTS_FULL_SIZE] commitments,
+  #[secret] reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds,
+  #[secret] stack u8[PNC_SALT_SIZE] salt,
+  #[public] reg ui64 round,
+  #[public] reg ui16 player
+) -> stack u8[COMMITMENTS_FULL_SIZE]
+{
+  reg u64 r;
+  reg u16 player16;
+
+  reg ptr u8[COMMITMENTS_FULL_SIZE] a;
+  reg ptr u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] b;
+  reg ptr u8[PNC_SALT_SIZE] c;
+
+  c = salt;
+  b = seeds;
+  a = commitments;
+
+  r = (64u) round;
+  player16 = (16u) player;
+  a = commit_x4(a, b, c, r, player16);
+
+  commitments = a;
+
+  return commitments;
+}
+
+inline fn __commit_x4_verify(
+  #[secret] stack u8[COMMITMENTS_FULL_SIZE] commitments,
+  #[secret] stack u8[TREE_NODES_2_SIZE] seeds,
+  #[secret] stack u8[PNC_SALT_SIZE] salt,
+  #[public] reg u16 round,
+  #[public] reg u16 player
+) -> stack u8[COMMITMENTS_FULL_SIZE]
+{
+  reg ptr u8[COMMITMENTS_FULL_SIZE] a;
+  reg ptr u8[TREE_NODES_2_SIZE] b;
+  reg ptr u8[PNC_SALT_SIZE] c;
+
+  c = salt;
+  b = seeds;
+  a = commitments;
+
+  a = commit_x4_verify(a, b, c, round, player);
+
+  commitments = a;
+
+  return commitments;
+}
+
+inline fn __commit_h_x4(
+  #[poly=in] stack u8[CH_ROUND_SIZE * PNC_N_ROUNDS] out,
+  #[poly=in] stack u8[COMMITMENTS_SIZE * PNC_N_ROUNDS] in,
+  #[public] reg u64 idx
+) -> stack u8[CH_ROUND_SIZE * PNC_N_ROUNDS]
+{
+  reg ptr u8[CH_ROUND_SIZE * PNC_N_ROUNDS] a;
+  reg ptr u8[COMMITMENTS_SIZE * PNC_N_ROUNDS] b;
+
+  a = out;
+  b = in;
+
+  a = _commit_h_x4(a, b, idx);
+  out = a;
+
+  return out;
+}
+
+inline fn __commit_v_x4(
+  #[secret] stack u8[CV_ROUND_SIZE * PNC_N_ROUNDS] out,
+  #[secret] stack u8[MZD_SIZE * PNC_N_ROUNDS] inputs,
+  #[secret] stack u8[MSGS_FULL_SIZE * PNC_N_ROUNDS] msgs,
+  #[public] reg u64 idx
+) -> stack u8[CV_ROUND_SIZE * PNC_N_ROUNDS]
+{
+  reg ptr u8[CV_ROUND_SIZE * PNC_N_ROUNDS] a;
+  reg ptr u8[MZD_SIZE * PNC_N_ROUNDS] b;
+  reg ptr u8[MSGS_FULL_SIZE * PNC_N_ROUNDS] c;
+
+  a = out;
+  b = inputs;
+  c = msgs;
+
+  a = _commit_v_x4(a, b, c, idx);
+  out = a;
+
+  return out;
+}
+
+

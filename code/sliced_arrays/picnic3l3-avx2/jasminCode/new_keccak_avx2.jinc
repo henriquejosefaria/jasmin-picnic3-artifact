@@ -1,0 +1,131 @@
+require "params.jinc"
+require "common/keccakf1600_generic.jinc"
+require "common/keccak1600_generic.jinc"
+require "common/subreadwrite_imem.jinc"
+require "keccak/keccak1600_updstate.jinc"
+
+
+
+namespace A1 {
+  param int _ASIZE = 1;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A2 {
+  param int _ASIZE = 2;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A13 {
+  param int _ASIZE = PNC_MESSAGE_BYTE_LENGTH;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A24 {
+  param int _ASIZE = PNC_INPUT_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A32 {
+  param int _ASIZE = PNC_SALT_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A48 {
+  param int _ASIZE = 2*PNC_INPUT_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A56 {
+  param int _ASIZE = PNC_SALT_AND_ROOT_LENGTH;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A96 {
+  param int _ASIZE = TAPE_AUX_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A768 {
+  param int _ASIZE = COMMITMENTS_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A1536 {
+  param int _ASIZE = MSGS_FULL_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+namespace A20112 {
+  param int _ASIZE = PNC_N_ROUNDS * CH_ROUND_SIZE;
+  require "keccak/keccak1600_updstate_ASIZE.jinc"
+}
+
+
+#[returnaddress="stack"]
+fn _commit(
+  reg ptr u8[COMMITMENT_SIZE] out,
+  reg ptr u8[TREE_DATA_SIZE] seed,
+  reg ptr u8[TAPE_AUX_SIZE] tape_aux, 
+  reg ptr u8[PNC_SALT_SIZE] salt,
+  reg u64 round,
+  reg u16 player
+) -> reg ptr u8[COMMITMENT_SIZE]
+{
+  reg ui64 len;
+  reg ui8 x;
+  reg u8 y;
+  reg u16 round16;
+
+  stack u8[2] t16_s;
+
+  reg ptr u8[2] t16;
+
+  stack u64[26] s_pst;
+  reg ptr u64[26] pst;
+
+  () = #spill(out, round, player);
+  /*****************************/
+  /*         SET STATE         */
+  /*****************************/
+
+  pst = s_pst;
+  x = (R136 >> 3);
+  y = SHAKE;
+  pst = _init_updstate_avx2(pst, x, y);
+
+  /*****************************/
+  /*     ABSORB INTO STATE     */
+  /*****************************/
+
+  len = 24;
+  pst = A24::_update_updstate_avx2(pst, seed, len);
+  len = 96;
+  pst = A96::_update_updstate_avx2(pst, tape_aux, len);
+  len = 32;
+  pst = A32::_update_updstate_avx2(pst, salt, len);
+
+  len = 2;
+  () = #unspill(round);
+  round16 = round;
+  t16_s[:u16 0] = round16;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+  
+  len = 2;
+  () = #unspill(player);
+  t16_s[:u16 0] = player;
+  t16 = t16_s;
+  pst = A2::_update_updstate_avx2(pst, t16, len);
+  pst = _finish_updstate_avx2(pst);
+
+  /*******************************************/
+  /* APPLY PERMUTATION TO STATE AND RETRIEVE */
+  /*******************************************/
+
+  len = 48;
+  () = #unspill(out);
+  _, out = A48::_squeeze_updstate_avx2(pst, out, len);
+
+  return out;
+}

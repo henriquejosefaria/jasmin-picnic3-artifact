@@ -1,0 +1,698 @@
+require "params.jinc"
+require "lowmc.jinc"
+require "copy.jinc"
+require "io.jinc"
+
+require "keccak_avx2_transitions.jinc"
+require "keccak_x4_avx2_transitions.jinc"
+
+require "picnic3_tree_transitions.jinc"
+require "picnic3_impl_transitions.jinc"
+
+
+require "picnic3_simulate.jinc"
+
+
+export
+fn keyGen_jazz(
+	#[public] reg u64 privatekey_data,
+	#[public] reg u64 publickey_data
+)
+{
+	#[secret] stack u8[MZD_SIZE] ciphertext_j;
+	#[secret] stack u8[MZD_SIZE] mzd_plaintext_result;
+	#[secret] stack u8[MZD_SIZE] mzd_privatekey_result;
+
+	#[secret] stack u8[MZD_SIZE] mzd_plaintext_data;
+	#[secret] stack u8[MZD_SIZE] mzd_privatekey_data;
+
+	stack u64 s_privatekey_data;
+	stack u64 s_publickey_data;
+
+	reg u64 t1;
+	reg u256 t;
+
+	inline int z;
+
+	t = #set0_256();
+	mzd_privatekey_data[:u256 0] = t;
+	mzd_plaintext_data[:u256 0] = t;
+
+	/* MZD_FROM_CHAR_ARRAY */
+
+	for z=0 to PNC_U64_INPUT_SIZE
+	{
+		t1 = [privatekey_data + z*8];
+		t1 = #BSWAP(t1);
+		mzd_privatekey_result[:u64 MZD_U64_SIZE - 1 - z] = t1;
+	}
+	
+	for z=0 to PNC_U64_INPUT_SIZE
+	{
+		t1 = [privatekey_data + 64 + z*8];
+		[publickey_data + 4 * 8 + z*8] = t1;
+		t1 = #BSWAP(t1);
+		mzd_plaintext_result[:u64 MZD_U64_SIZE - 1 - z] = t1;
+
+		z += 1;
+	}
+
+	s_privatekey_data = privatekey_data;
+	s_publickey_data = publickey_data;
+
+	ciphertext_j = _n_lowmc(mzd_privatekey_result, mzd_plaintext_result, ciphertext_j);
+	
+	publickey_data = s_publickey_data;	
+
+	for z=0 to PNC_U64_INPUT_SIZE
+	{
+		t1 = ciphertext_j[:u64 PNC_U64_INPUT_SIZE - 1 - z];
+		t1 = #BSWAP_64(t1);
+		[publickey_data + z*8] = t1;
+	}
+}
+
+export
+fn sign_picnic3_jazz(
+	#[public] reg u64 privateKey,
+	#[public] reg u64 publicKey,
+	#[public] reg u64 plaintext,
+	#[public] reg u64 message,
+	#[public] reg u64 sig
+)
+{
+	reg u16 round player repIndex;
+	reg u64 tmp64 base_seeds base_commitments idx pos t revealedSize msgs_idx tapes_idx unopened;
+	reg u256 t256;
+
+	/* OUTSIDE INFO STACKS */
+	stack u64 s_privateKey s_publicKey s_plaintext s_message s_sig s_t;
+	
+	/* PICNIC3 STACKS */
+	#[secret] 		stack u8[PNC_SALT_AND_ROOT_LENGTH] saltAndRoot;
+	#[secret] stack u8[TREE_NODES_1_SIZE] iSeedsTree;		       /*      SEEDS      */
+	#[public]         stack u8[TREE_NUM_NODES_1] iSeedsTree_have;        /*      SEEDS      */
+	#[public]         stack u8[TREE_NUM_NODES_1] iSeedsTree_exists;      /*      SEEDS      */
+	#[secret] stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds;  /*      SEEDS      */
+	stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] seeds_have, seeds_exists;/*      SEEDS      */
+	stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes;					   /*      TAPES      */
+	stack u8[PNC_N_ROUNDS * MZD_SIZE] input_masks;		  			   /*   INPUT_MASKS   */
+	stack u8[COMMITMENTS_FULL_SIZE] C;					 			   /*     COMMITS     */
+	stack u8[PNC_N_ROUNDS *  MSGS_FULL_SIZE] msgs;			    	   /*       MSGS      */
+	stack u8[CH_FULL_SIZE] Ch;										   /*        Ch        */	
+	stack u8[PNC_N_ROUNDS * CV_ROUND_SIZE] Cv;			 			   /*        Cv        */
+	#[secret] stack u8[TREE_NODES_3_SIZE] treeCv;				   /*    MERKLE TREE   */
+	stack u8[TREE_NUM_NODES_3] treeCv_have, treeCv_exists;			   /*    MERKLE TREE   */
+	stack u16[MISSING_LEAVES_SIZE] missingLeaves;					   /*  MISSING LEAVES  */
+
+
+	/* PICNIC3 AUXILIAR STACKS */
+	#[secret] stack u8[MZD_SIZE] privKey pubKey plaintext_j m_plaintext m_maskedKey;
+	#[secret] stack u8[PNC_MESSAGE_BYTE_LENGTH] message_j;
+
+	/* STACKS AND REG PTRS FOR PICNIC3  SUB-STACKS */
+
+	#[secret] stack u8[PNC_SALT_SIZE] salt;
+	stack u8[PNC_ROOT_SIZE] root;
+	stack u8[CHALLENGE_C_SIZE] challengeC;
+	stack u8[CHALLENGE_P_SIZE] challengeP;
+
+	reg ptr u8[PNC_SALT_SIZE] reg_salt;
+	reg ptr u8[SIG_CHALLENGE_C_SIZE] reg_challengeC;
+	reg ptr u16[MISSING_LEAVES_SIZE] reg_missingLeaves;
+	reg ptr u8[PNC_MESSAGE_BYTE_LENGTH] reg_message_j;
+
+
+	s_publicKey  = publicKey;
+	s_privateKey = privateKey;
+	s_plaintext  = plaintext;
+	s_sig = sig;
+	
+	/* COPY OUTSIDE INFO & FREE USED REGISTERS */
+
+	tmp64 = s_publicKey;  pubKey[0:PNC_INPUT_SIZE]      = __memcpy_4Words_from_reg(pubKey[0:PNC_INPUT_SIZE], tmp64);
+	tmp64 = s_privateKey; privKey[0:PNC_INPUT_SIZE]     = __memcpy_4SecretWords_from_reg(privKey[0:PNC_INPUT_SIZE], tmp64);
+	tmp64 = s_plaintext;  plaintext_j[0:PNC_INPUT_SIZE] = __memcpy_4Words_from_reg(plaintext_j[0:PNC_INPUT_SIZE], tmp64);
+
+	reg_message_j = message_j;
+	message = message;
+	reg_message_j   = __memcpy_message(reg_message_j, message);
+	message_j = reg_message_j;
+
+	s_message    = message;
+
+	saltAndRoot = __computeSaltAndRootSeed(saltAndRoot, privKey, pubKey, plaintext_j, message_j);
+
+
+	/* CREATE AND EXPAND A TREE CONTAINING EACH ROUND TREE'S SEED */
+
+	iSeedsTree, iSeedsTree_have, iSeedsTree_exists = 
+		__createTree_1(iSeedsTree, iSeedsTree_have, iSeedsTree_exists);
+
+
+	root = saltAndRoot[PNC_SALT_SIZE:PNC_ROOT_SIZE];
+	iSeedsTree = __memcpy_4Words(iSeedsTree, root);
+	iSeedsTree_have[0] = 1;
+
+	repIndex = 0;
+	salt = saltAndRoot[0:PNC_SALT_SIZE];
+	iSeedsTree, iSeedsTree_have, iSeedsTree_exists = 
+		__expandSeeds_1( iSeedsTree, iSeedsTree_have, iSeedsTree_exists, salt, repIndex);
+
+
+	/* CREATE FIRST COMMITS	*/
+
+	m_plaintext = __mzd_from_char_array(m_plaintext, plaintext_j);
+	
+	/* FOR EACH ROUND:
+	 * 
+	 * 	- BUILD ITS TREE;
+	 *  - COMPUTE TAPES AND AUX_TAPES FOR EACH PLAYER FROM THE TREE'S LEAVES;
+	 *	- COMMIT THE AUX_TAPES AND THE TREE'S LEAVES
+	 *
+	*/
+
+	seeds, seeds_have, seeds_exists = __createTree_22(seeds, seeds_have, seeds_exists);
+
+	t = 0;
+	while(t < PNC_N_ROUNDS)
+	{
+		s_t = t;
+
+		seeds, seeds_have, seeds_exists = 
+			__buildTree2(seeds, seeds_have, seeds_exists, iSeedsTree, salt, t);
+
+		t = s_t;
+		tapes = __createRandomTapes(tapes, seeds, salt, t);
+
+		pos = s_t;
+		tapes, input_masks = __computeAuxTape(tapes, input_masks, privKey, pos);
+
+		t = s_t;
+		round = t;
+		player = 0;
+		base_seeds = t;
+		base_seeds *= TREE_NODES_2_SIZE;
+		base_seeds += GET_LEAVES_2 * PNC_INPUT_SIZE;
+		base_commitments = s_t;
+		base_commitments *= PNC_N_MPC_PARTIES;
+		base_commitments *= COMMITMENT_SIZE;
+		C = __commit2_x4(C, seeds, salt, round, player, base_seeds, base_commitments);
+
+		t = s_t;
+		round = t;
+		player = 4;
+		base_seeds = t;
+		base_seeds *= TREE_NODES_2_SIZE;
+		base_seeds += GET_LEAVES_2 * PNC_INPUT_SIZE + 4 * PNC_INPUT_SIZE;
+		base_commitments = s_t;
+		base_commitments *= PNC_N_MPC_PARTIES;
+		base_commitments *= COMMITMENT_SIZE;
+		base_commitments += 4 * COMMITMENT_SIZE;
+		C = __commit2_x4(C, seeds, salt, round, player, base_seeds, base_commitments);
+
+		t = s_t;
+		round = t;
+		player = 8;
+		base_seeds = t;
+		base_seeds *= TREE_NODES_2_SIZE;
+		base_seeds += GET_LEAVES_2 * PNC_INPUT_SIZE + 8 * PNC_INPUT_SIZE;
+		base_commitments = s_t;
+		base_commitments *= PNC_N_MPC_PARTIES;
+		base_commitments *= COMMITMENT_SIZE;
+		base_commitments += 8 * COMMITMENT_SIZE;
+		C = __commit2_x4(C, seeds, salt, round, player, base_seeds, base_commitments);
+
+		t = s_t;
+		round = t;
+		player = 12;
+		base_seeds = t;
+		base_seeds *= TREE_NODES_2_SIZE;
+		base_seeds += GET_LEAVES_2 * PNC_INPUT_SIZE + 12 * PNC_INPUT_SIZE;
+		base_commitments = s_t;
+		base_commitments *= PNC_N_MPC_PARTIES;
+		base_commitments *= COMMITMENT_SIZE;
+		base_commitments += 12 * COMMITMENT_SIZE;
+		C = __commit2_x4(C, seeds, salt, round, player, base_seeds, base_commitments);
+
+		t = s_t;
+		player = 15;
+		base_seeds = t;
+		base_seeds *= TREE_NODES_2_SIZE;
+		base_seeds += GET_LEAVES_2 * PNC_INPUT_SIZE + 15 * PNC_INPUT_SIZE;
+		base_commitments = s_t;
+		base_commitments *= PNC_N_MPC_PARTIES;
+		base_commitments *= COMMITMENT_SIZE;
+		base_commitments += 15 * COMMITMENT_SIZE;
+		C = __commit2(C, seeds, tapes, salt, t, player, base_seeds, base_commitments);
+
+		t = s_t;
+		t = t + 1;
+	}
+
+	t256 = #set0_256();
+	t = 0;
+	while(t < PNC_N_ROUNDS * MSGS_FULL_SIZE)
+	{
+		msgs.[u256 t] = t256;
+		t += 32;
+	}
+
+	t = 0;
+	while(t < PNC_N_ROUNDS)
+	{
+		
+		s_t = t;
+
+		pos = s_t;
+		pos *= MZD_SIZE;
+		m_maskedKey = __masked_mzd_from_char_array(m_maskedKey, input_masks, pos);
+
+		msgs_idx = s_t;
+		msgs_idx *= MSGS_FULL_SIZE; 
+
+		tapes_idx = s_t;
+		tapes_idx *= TAPES_FULL_SIZE;
+
+		unopened = PNC_N_MPC_PARTIES;
+
+		msgs = 
+			__simulateOnline2(
+							 m_maskedKey,
+							 tapes, 
+							 msgs, 
+							 m_plaintext, 
+							 msgs_idx, 
+							 tapes_idx, 
+							 unopened
+							);
+		
+		t = s_t;
+		t = t + 1;
+	}
+
+	t = 0;
+	while(t < PNC_N_X4_ROUNDS)
+	{
+		s_t = t;
+		idx = t;
+		idx *= X4_ROUNDS;
+		Ch = __commit_h_x4(Ch, C, idx);
+
+		idx = s_t;
+		idx *= X4_ROUNDS;
+		Cv = __commit_v_x4(Cv, input_masks, msgs, idx);
+
+		t = s_t;
+		t = t + 1;
+	}
+
+	t = PNC_N_X4_ROUNDS * X4_ROUNDS;
+	while(t < PNC_N_ROUNDS)
+	{
+		s_t = t;
+		idx = t;
+		Ch = __commit_h(Ch, C, idx);
+
+		idx = s_t;
+		Cv = __commit_v(Cv, input_masks, msgs, idx);
+
+		t = s_t;
+		t = t + 1;
+	}
+
+	treeCv, treeCv_have, treeCv_exists = __createTree_3(treeCv, treeCv_have, treeCv_exists);
+
+	t = 0;
+	while(t < TREE_NUM_NODES_3 * PNC_U64_DIGEST_SIZE)
+	{
+		treeCv[u64 t] = 0;
+		t += 1;
+	}
+
+	treeCv, treeCv_have, treeCv_exists 
+		= __buildMerkleTree(treeCv, treeCv_have, treeCv_exists, Cv, salt);
+
+	sig = s_sig;
+	sig, challengeC, challengeP = __HCP( sig
+										,Ch
+										,treeCv[0 : PNC_DIGEST_SIZE]
+										,salt
+										,pubKey[0:PNC_INPUT_SIZE]
+										,plaintext_j[0:PNC_INPUT_SIZE]
+										,message_j
+										,challengeC
+										,challengeP
+									   );
+
+
+	reg_salt = saltAndRoot[0:PNC_SALT_SIZE];
+	sig = _memcpy_salt(sig, reg_salt);
+
+	reg_challengeC = challengeC;
+	sig = __revealSeeds(iSeedsTree, iSeedsTree_exists, reg_challengeC, sig);
+
+	reg_missingLeaves = missingLeaves;
+	missingLeaves = __getMissingLeavesList(reg_challengeC, reg_missingLeaves);
+
+	sig, revealedSize = __openMerkleTree(treeCv, treeCv_exists, missingLeaves, sig);
+
+	sig = __assemble_proof(sig, seeds, seeds_exists, tapes, saltAndRoot[0:PNC_SALT_SIZE], input_masks, msgs, challengeC, challengeP);
+}
+
+
+/*
+ * This function compares the content of the challenge within the signature
+ * and the recomputed challenge - public values
+ */
+fn _memcmp(
+	reg ptr u8[SIG_CHALLENGE_SIZE] semi_sig,
+	reg ptr u8[SIG_CHALLENGE_SIZE] sig
+) -> reg u64
+{
+	reg u64 i t1 t2 result;
+
+	result = 0;
+
+	i=0;
+	while(i < SIG_U64_CHALLENGE_SIZE)
+	{	
+		#[declassify] t1 = semi_sig[u64 i];
+		#[declassify] t2 = sig[u64 i]; 
+		t1 -= t2;
+		if (t1 == 0)
+		{
+			i += 1;
+
+		} else{
+
+			result = 3;
+			i = SIG_CHALLENGE_SIZE;
+		}
+	}
+
+	return result;	
+}
+
+inline
+fn __memcmp(
+	stack u8[SIG_CHALLENGE_SIZE] challenge,
+	stack u8[SIG_CHALLENGE_SIZE] _challenge
+) -> reg u64
+{
+	reg u64 res;
+	reg ptr u8[SIG_CHALLENGE_SIZE] a b;
+
+	a = challenge;
+	b = _challenge;
+	res = _memcmp(a,b);
+
+	return res;
+}
+
+export
+fn verify_picnic3_jazz(
+	#[public] reg u64 publicKey,
+	#[public] reg u64 plaintext,
+	#[public] reg u64 message,
+	#[public] reg u64 sig,
+	#[public] reg u64 sig_len,
+	#[public] reg u64 result
+)
+{
+	reg u8 t8;
+	reg u16 round_u16 t16 P_index_u16;
+	reg u64 idx idx2 round tmp64 t P_index bytesRequired revealedSize;
+
+	stack u16 s_t16;
+	stack u64 s_idx2 s_t;
+	stack u64[REVEALED_SIZE] revealed;
+
+	/* OUTSIDE INFO STACKS */
+	stack u64 s_publicKey s_plaintext s_message s_sig s_idx;
+	
+	/* PICNIC3 STACKS */
+	stack u8[PNC_SALT_SIZE] salt;
+	stack u8[SIG_CHALLENGE_SIZE] challenge;
+	stack u8[SIG_CHALLENGE_SIZE] _challenge;
+	stack u8[CHALLENGE_C_SIZE] challengeC;
+	stack u8[CHALLENGE_P_SIZE] challengeP;
+	stack u8[TREE_NODES_1_SIZE] iSeedsTree;		       				   /*      SEEDS      */
+	stack u8[TREE_NUM_NODES_1] iSeedsTree_have;        				   /*      SEEDS      */
+	stack u8[TREE_NUM_NODES_1] iSeedsTree_exists;      				   /*      SEEDS      */
+	stack u8[PNC_N_ROUNDS * TAPES_FULL_SIZE] tapes;					   /*      TAPES      */
+	stack u8[COMMITMENTS_FULL_SIZE] C;					 			   /*     COMMITS     */
+	stack u8[CH_FULL_SIZE] Ch;										   /*        Ch        */	
+	stack u8[CV_FULL_SIZE] Cv;							 			   /*        Cv        */
+	stack u8[TREE_NODES_3_SIZE] treeCv;				   				   /*    MERKLE TREE   */
+	stack u8[TREE_NUM_NODES_3] treeCv_have, treeCv_exists;			   /*    MERKLE TREE   */
+	stack u16[MISSING_LEAVES_SIZE] missingLeaves;					   /*  MISSING LEAVES  */
+	
+	stack u8[PROOFS_FULL_SIZE] proofs;								   /*      PROOFS      */
+
+
+	stack u8[TREE_NODES_2_SIZE] seeds_tree;
+	stack u8[TREE_NUM_NODES_2] seeds_tree_have, seeds_tree_exists;
+
+	stack u8[PNC_N_ROUNDS * TREE_NODES_2_SIZE] seeds;
+	stack u8[PNC_N_ROUNDS * TREE_NUM_NODES_2] seeds_have, seeds_exists;
+
+	stack u8[PNC_INPUT_SIZE] pubKey plaintext_j m_plaintext;
+	stack u8[PNC_MESSAGE_BYTE_LENGTH] message_j;
+	stack u8[TAPES_FULL_SIZE] round_tapes;
+
+	reg ptr u8[CHALLENGE_C_SIZE] reg_challengeC;
+
+	s_sig = sig;
+	() = #spill(result, sig_len);
+
+	/* COPY OUTSIDE INFO & FREE USED REGISTERS */
+
+	tmp64 = publicKey; pubKey      = __memcpy_4Words_from_reg(pubKey, tmp64);
+	tmp64 = plaintext; plaintext_j = __memcpy_4Words_from_reg(plaintext_j, tmp64);
+
+	message_j = __memcpy_message(message_j, message);
+
+
+	s_publicKey = publicKey;
+	s_plaintext = plaintext;
+	s_message = message;
+
+	sig = s_sig;
+	challenge = __memcpy_8Words_from_reg(challenge, sig);
+	challengeC, challengeP = __expand_challenge(sig, challengeC, challengeP);
+
+	sig = s_sig;
+	sig += SIG_SALT_IDX;
+	salt, sig = _memcpy_salt_from_sig(salt, sig);
+	s_sig = sig;
+
+	iSeedsTree, iSeedsTree_have, iSeedsTree_exists =
+		__createTree_1(iSeedsTree, iSeedsTree_have, iSeedsTree_exists);
+
+	bytesRequired = SIG_CHALLENGE_SIZE + SIG_SALT_SIZE;
+	revealed, revealedSize = revealSeedsSize_1(iSeedsTree_exists, challengeC, revealed);
+	t = revealedSize;
+	t *= PNC_SEED_SIZE;
+	bytesRequired += t;
+	() = #spill(bytesRequired);
+
+	sig = s_sig;
+	// redo all seeds to use x4
+	iSeedsTree, iSeedsTree_have, iSeedsTree_exists, sig =
+		_reconstructSeeds_1(
+							 iSeedsTree,
+							 iSeedsTree_have,
+							 iSeedsTree_exists,
+							 revealed,
+							 revealedSize,
+							 sig,
+							 salt
+						    );
+	s_sig = sig;
+
+	treeCv, treeCv_have, treeCv_exists =
+		__createTree_3(treeCv, treeCv_have, treeCv_exists);
+
+	missingLeaves = getMissingLeavesList(missingLeaves, challengeC);
+
+	() = #unspill(bytesRequired);
+	t = __openMerkleTreeSize(treeCv_exists, missingLeaves);
+	bytesRequired += t;
+
+	t16 = 0;
+	while(t16 < PNC_N_ROUNDS)
+	{
+		reg_challengeC = challengeC;
+		t8 = __contains_challengeC_2(reg_challengeC, t16);
+		if(t8 == 1)
+		{
+			reg_challengeC = challengeC;
+			P_index = __indexOf(reg_challengeC, t16);
+			P_index_u16 = challengeP[u16 P_index];
+			if(P_index_u16 != LAST_PLAYER)
+			{
+				bytesRequired += PNC_VIEW_SIZE;
+			}
+			bytesRequired += PNC_DIGEST_SIZE;
+			bytesRequired += PNC_INPUT_SIZE;
+			bytesRequired += PNC_VIEW_SIZE;
+			bytesRequired += PROOF_SEED_INFO_SIZE;
+		}
+		t16 += 1;
+	}
+
+	sig = s_sig;
+	treeCv, treeCv_have, treeCv_exists, sig = __addMerkleNodes(treeCv, treeCv_have, treeCv_exists, missingLeaves, sig);
+
+	() = #unspill(sig_len);
+	if(bytesRequired == sig_len)
+	{
+		() = #spill(sig_len);
+
+		t8 = 1;
+		proofs, t8 = __get_proofs_from_sig(proofs, challengeC, challengeP, sig, t8);
+
+		if(t8 == 0)
+		{
+
+			m_plaintext = __mzd_from_char_array(m_plaintext, plaintext_j);
+
+			seeds, seeds_have, seeds_exists = __createTree_22(seeds, seeds_have, seeds_exists);
+
+			s_idx = 0;
+			s_idx2 = 0;
+			t = 0;
+			s_t16 = 0;
+			while(t < PNC_N_ROUNDS)
+			{
+				s_t = t;
+				round_u16 = s_t16;
+				reg_challengeC = challengeC;
+				t8 = __contains_challengeC_2(reg_challengeC, round_u16);
+				
+
+				if(t8 == 0)
+				{
+
+					/* Expand iSeed[t] to seeds for each parties, using a seed tree */
+					round = s_t;
+					round_u16 = s_t16;
+
+					seeds_tree, seeds_tree_have, seeds_tree_exists = 
+						__generateSeeds( seeds_tree,
+										 seeds_tree_have,
+										 seeds_tree_exists,
+										 iSeedsTree,
+										 salt,
+										 round_u16,
+										 round
+										);
+				}
+				else
+				{
+
+					seeds_tree, seeds_tree_have, seeds_tree_exists
+						= __createTree_2(seeds_tree, seeds_tree_have, seeds_tree_exists);
+
+					idx = s_idx;
+					idx *= PROOF_U64_FULL_SIZE;
+					idx += PROOF_U64_SEED_INFO_IDX;
+
+					t16 = s_t16;
+					reg_challengeC = challengeC;
+					P_index = __indexOf(reg_challengeC, round_u16);
+					P_index_u16 = challengeP[u16 P_index];
+
+					seeds_tree, seeds_tree_have, seeds_tree_exists
+						= __reconstructSeeds_2(
+												seeds_tree,
+												seeds_tree_have,
+												seeds_tree_exists,
+												proofs,
+												salt,
+												idx,
+												P_index_u16,
+												t16
+										      );
+
+					s_idx += 1;
+				}	
+
+				t = s_t;
+				round_tapes = __createRandomTapes_verify(round_tapes, seeds_tree, salt, t);
+
+				round = s_t;
+				round_u16 = s_t16;
+				idx2 = s_idx2;
+				C, round_tapes, idx2 = 
+					__retrieveCommitments(
+										   C,
+										   challengeC,
+										   challengeP,
+										   proofs,
+										   round_tapes,
+										   seeds_tree,
+										   salt,
+										   round,
+										   round_u16,
+										   idx2
+										 );
+				s_idx2 = idx2;
+
+				t = s_t;
+				if (t >= PNC_N_X4_ROUNDS * 4) // last rounds
+				{
+					Ch = __commit_h(Ch, C, t);
+				} else
+				{
+					t = s_t;
+					t += 1;
+					t &= 3;
+
+					if(t == 0) // round is multiple of 4
+					{
+						
+						t = s_t;
+						t -= 3;
+						Ch = __commit_h_x4(Ch, C, t);
+					}
+				}
+				
+				t = s_t;
+				t *= TAPES_FULL_SIZE;
+				tapes = __copy_round_tapes_to_tapes(tapes, round_tapes, t);
+
+				t16 = s_t16;
+				t16 = t16 + 1;
+				s_t16 = t16;
+				t = s_t;
+				t = t + 1;
+			}
+
+			Cv = __commitToViews(challengeC, Cv);
+
+			Cv, tapes = __recompute_mpc(challengeP, challengeC, proofs, tapes, m_plaintext, Cv);
+
+			tmp64 = 0;
+			tmp64, treeCv, treeCv_have, treeCv_exists = _verifyMerkleTree(treeCv, treeCv_have, treeCv_exists, Cv, challengeC, salt);
+
+			// Merkle tree correctly verifyed
+			if(tmp64 == 0)
+			{
+
+				_challenge = __HCP_verify(_challenge, Ch, treeCv[0 : PNC_DIGEST_SIZE], salt, pubKey, plaintext_j, message_j);	
+				tmp64 = __memcmp(challenge, _challenge);
+			}
+			else
+			{
+				tmp64 = 1; 
+			}
+
+			() = #unspill(result);
+			[result + 0] = tmp64;
+
+		}
+	}
+
+}
